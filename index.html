@@ -76,9 +76,10 @@
   .node.obstacle { font-size: calc(var(--cell) * 0.5); z-index: 6; color: #dc3545; font-weight: bold;}
   .node.center { font-size: calc(var(--cell) * 0.7); z-index: 7; cursor: not-allowed; }
   
+  /* 將 svg-overlay 的 z-index 降到 4，確保它在 .node (5,6,7) 之下 */
   #svg-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      transform: scaleY(-1); pointer-events: none; z-index: 10;
+      transform: scaleY(-1); pointer-events: none; z-index: 4;
   }
   
   .loader { display: inline-block; width: 10px; height: 10px; border: 2px solid #007bff; border-bottom-color: transparent; border-radius: 50%; animation: rotation 1s linear infinite; margin-right: 5px; vertical-align: middle;}
@@ -131,7 +132,7 @@
 <div id="controls">
   <div class="tutorial-box">
     <strong>📖 操作教學：</strong>
-    <p>調整設定：<span style="font-weight: normal;">先使用滑桿修改「總步數」與「產出上限」，調整要求的同時更新介面。</span></p>
+    <p>調整設定：<span style="font-weight: normal;">使用滑桿修改「總步數」與「產出上限」。</span></p>
     <p>佈置網格：<span style="font-weight: normal;">點擊網格上帶有「淡藍色圓點」的交叉點來切換狀態：</span></p>
     <div style="padding-left: 15px; margin-bottom: 6px;">
         👉 點 1 下：設為 ⭐ 目標（路線必經此處）<br>
@@ -187,7 +188,6 @@
 <script>
   /* =========================================================================
      核心演算法 (Python 完全移植至 JavaScript) 
-     無伺服器架構，依賴瀏覽器 V8 引擎極速執行
   ========================================================================= */
   const TRANSITIONS = {
       "0,1": [-1, 1, 3], "0,-1": [1, 1, 1],
@@ -229,7 +229,6 @@
       let targetSet = new Set(targets.filter(t => t[0] !== 0 || t[1] !== 0).map(t => `${t[0]},${t[1]}`));
       let obstacleSet = new Set(obstacles.map(o => `${o[0]},${o[1]}`));
       
-      // 靜態防呆診斷
       if (obstacleSet.has("0,0")) return { status: "error", nodes: ["0,0"], msg: "❌ 起點 (0,0) 不能是障礙物！" };
       for (let t of targetSet) {
           if (obstacleSet.has(t)) return { status: "error", nodes: [t], msg: "❌ 目標與障礙物重疊！" };
@@ -261,7 +260,6 @@
       let minRequired = calcExactMinSteps(targetSet);
       if (minRequired > totalSteps) return { status: "error", nodes: Array.from(targetSet), msg: `❌ 步數不足：最少需 ${minRequired} 步。` };
 
-      // Flood Fill 孤島偵測
       let waterQueue = [[0, 0]];
       let floodedArea = new Set(["0,0"]);
       let maxReach = Math.floor(totalSteps / 2) + 1;
@@ -414,7 +412,6 @@
 
       if (validPaths.length === 0) return { status: "error", nodes: [], msg: "❌ 無解：找不到合法封閉迴路。" };
       
-      // Shuffle Array
       for (let i = validPaths.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [validPaths[i], validPaths[j]] = [validPaths[j], validPaths[i]];
@@ -436,17 +433,32 @@
       return svgD;
   }
 
+  // 取得路徑與物件的動態邊界，用於精確裁切縮圖與放大圖
+  function getBounds(startDir, pathTurns, targets, obstacles) {
+      let minX = 0, maxX = 0, minY = 0, maxY = 0;
+      let cx = 0, cy = 0, cdir = startDir;
+      for (let turn of pathTurns) {
+          let trans = TRANSITIONS[`${cdir},${turn}`];
+          cx += trans[0]; cy += trans[1]; cdir = trans[2];
+          if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+          if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+      }
+      targets.forEach(t => {
+          if (t[0] < minX) minX = t[0]; if (t[0] > maxX) maxX = t[0];
+          if (t[1] < minY) minY = t[1]; if (t[1] > maxY) maxY = t[1];
+      });
+      obstacles.forEach(o => {
+          if (o[0] < minX) minX = o[0]; if (o[0] > maxX) maxX = o[0];
+          if (o[1] < minY) minY = o[1]; if (o[1] > maxY) maxY = o[1];
+      });
+      return {minX, maxX, minY, maxY};
+  }
+
   /* =========================================================================
      DOM 控制與事件綁定
   ========================================================================= */
   let cellStates = {};
   let debounceTimer;
-
-  function changeZoom() {
-    let val = document.getElementById('zoomSlider').value;
-    document.getElementById('zoomVal').innerText = val;
-    document.documentElement.style.setProperty('--cell', val + 'px');
-  }
 
   function clearAllErrors() {
     document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
@@ -520,22 +532,32 @@
     }
   }
 
-  function renderSvgGrid(R) {
+  // 根據動態邊界繪製網格
+  function renderSvgGrid(minX, maxX, minY, maxY, padding) {
       let grid = '';
-      for (let i = -R; i <= R; i++) {
-          grid += `<line x1="-${R+0.5}" y1="${i}" x2="${R+0.5}" y2="${i}" stroke="#e0e0e0" stroke-width="0.05"/>`;
-          grid += `<line x1="${i}" y1="-${R+0.5}" x2="${i}" y2="${R+0.5}" stroke="#e0e0e0" stroke-width="0.05"/>`;
+      let startX = Math.floor(minX - padding);
+      let endX = Math.ceil(maxX + padding);
+      let startY = Math.floor(minY - padding);
+      let endY = Math.ceil(maxY + padding);
+      
+      for (let i = startY; i <= endY; i++) {
+          grid += `<line x1="${startX}" y1="${i}" x2="${endX}" y2="${i}" stroke="#e0e0e0" stroke-width="0.05"/>`;
+      }
+      for (let i = startX; i <= endX; i++) {
+          grid += `<line x1="${i}" y1="${startY}" x2="${i}" y2="${endY}" stroke="#e0e0e0" stroke-width="0.05"/>`;
       }
       return grid;
   }
 
   function renderSvgFeatures(targets, obstacles) {
       let feats = `<circle cx="0" cy="0" r="0.25" fill="#222"/>`;
+      
       targets.forEach(t => {
           let cx = t[0], cy = t[1];
           let starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
           feats += `<polygon points="${starPoints}" fill="gold" stroke="#c69500" stroke-width="0.05" stroke-linejoin="round"/>`;
       });
+      
       obstacles.forEach(o => {
           feats += `<line x1="${o[0]-0.3}" y1="${o[1]-0.3}" x2="${o[0]+0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
           feats += `<line x1="${o[0]+0.3}" y1="${o[1]-0.3}" x2="${o[0]-0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
@@ -582,7 +604,6 @@
         }
 
         let start_time = performance.now();
-        // 核心調用：不再呼叫伺服器，直接在瀏覽器原生執行！
         let result = solveTwistyTurny(steps, targets, obstacles, limit);
         let elapsed_ms = performance.now() - start_time;
 
@@ -600,17 +621,23 @@
             let resDiv = document.getElementById('results-container');
             resDiv.innerHTML = ''; 
             
-            let R = Math.floor(steps / 2);
-            let viewBox = `-${R + 0.5} -${R + 0.5} ${2*R+1} ${2*R+1}`;
-            let gridHtml = renderSvgGrid(R);
             let featsHtml = renderSvgFeatures(targets, obstacles);
-            
             let tStr = targets.length > 0 ? targets.map(t => `<span class="coord-tag">(${t[0]}, ${t[1]})</span>`).join('') : "無";
             let oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : "無";
             let infoHtml = `<div style="margin-bottom:8px;"><strong>⭐ 目標點：</strong><br>${tStr}</div><div><strong>❌ 障礙物：</strong><br>${oStr}</div>`;
 
             chosenPaths.forEach((pathObj, idx) => {
                 let svg_d = generateSvgPath(pathObj[0], pathObj[1]);
+                // 計算每一張圖的緊湊邊界
+                let bounds = getBounds(pathObj[0], pathObj[1], targets, obstacles);
+                let P = 1.0; // 預留邊緣空間
+                let vX = bounds.minX - P, vY = bounds.minY - P;
+                let vW = bounds.maxX - bounds.minX + 2 * P, vH = bounds.maxY - bounds.minY + 2 * P;
+                let viewBox = `${vX} ${vY} ${vW} ${vH}`;
+                
+                // 只繪製可見區域內的網格
+                let gridHtml = renderSvgGrid(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, P);
+                
                 let card = document.createElement('div'); card.className = 'thumb-card';
                 card.onclick = function() {
                     openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml);
@@ -638,7 +665,6 @@
     }, 150); 
   }
 
-  changeZoom();
   initGrid(false);
   autoRun(); 
 </script>
