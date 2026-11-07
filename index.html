@@ -189,13 +189,10 @@
      核心演算法 (平坦陣列、Bitmask 與 Held-Karp 極速重構)
   ========================================================================= */
 
-  // 扁平化轉移矩陣: [cdir][turn_idx] -> [dx, dy, ndir]
-  // cdir: 0..3, turn: +1 (0), -1 (1)
   const TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
   const TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
   const TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
 
-  // 結果快取 (避免重複拖曳滑桿時重算)
   const queryCache = new Map();
 
   function solveTwistyTurnyOptimized(totalSteps, rawTargets, rawObstacles, requiredCount) {
@@ -203,10 +200,8 @@
       const W = 2 * R + 1;
       const totalCells = W * W;
 
-      // 快速座標轉 index
       const getIdx = (x, y) => (y + R) * W + (x + R);
 
-      // 目標點前處理 (排除起點 0,0)
       const targets = [];
       for (let i = 0; i < rawTargets.length; i++) {
           const t = rawTargets[i];
@@ -215,7 +210,6 @@
       const K = targets.length;
       if (K > 20) return { status: "error", nodes: [], msg: "❌ 目標點過多 (上限 20 個)！" };
 
-      // 檢查障礙與奇偶性
       const obstacleMap = new Uint8Array(totalCells);
       for (let i = 0; i < rawObstacles.length; i++) {
           const o = rawObstacles[i];
@@ -241,10 +235,8 @@
           }
       }
 
-      // 幾何距離預估下界 (TSP 距離)
       const dist = (x1, y1, x2, y2) => Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
 
-      // 距離矩陣: 0 為起點，1..K 為 targets[0..K-1]
       const P = K + 1;
       const distMat = new Int32Array(P * P);
       const ptsX = new Int32Array(P);
@@ -260,13 +252,12 @@
           }
       }
 
-      // Held-Karp TSP 動態規劃預算: dp[mask][i]
       const numMasks = 1 << K;
       const dp = new Int32Array(numMasks * K);
       dp.fill(-1);
 
       function getTspDist(mask, lastIdx) {
-          if (mask === 0) return distMat[(lastIdx + 1) * P + 0]; // 回到起點
+          if (mask === 0) return distMat[(lastIdx + 1) * P + 0];
           const memoKey = mask * K + lastIdx;
           if (dp[memoKey] !== -1) return dp[memoKey];
 
@@ -282,7 +273,6 @@
           return minVal;
       }
 
-      // 起點出發的精確最短需求步數
       let minRequired = 0;
       if (K > 0) {
           minRequired = 1e9;
@@ -295,7 +285,6 @@
           return { status: "error", nodes: targets.map(t => `${t[0]},${t[1]}`), msg: `❌ 步數不足：最少需 ${minRequired} 步。` };
       }
 
-      // Flood Fill 孤島連通性檢驗 (BFS, 使用 TypedArray 隊列)
       const qX = new Int32Array(totalCells);
       const qY = new Int32Array(totalCells);
       const flooded = new Uint8Array(totalCells);
@@ -327,14 +316,12 @@
           }
       }
 
-      // 目標點座標至 Bitmask 索引反查表
       const targetBitMap = new Int8Array(totalCells);
       targetBitMap.fill(-1);
       for (let i = 0; i < K; i++) {
           targetBitMap[getIdx(targets[i][0], targets[i][1])] = i;
       }
 
-      // 啟動零 GC 的 DFS
       const visited = new Uint8Array(totalCells);
       visited[getIdx(0, 0)] = 1;
 
@@ -350,7 +337,6 @@
       const startTime = performance.now();
       const targetSearchLimit = Math.max(30, requiredCount * 2);
 
-      // 動態估算當前座標到未訪目標的最短下界
       function estimateLowerBound(cx, cy, mask) {
           if (mask === 0) return Math.max(Math.abs(cx), Math.abs(cy));
           let minVal = 1e9;
@@ -363,13 +349,9 @@
           return minVal;
       }
 
-      // 環狀同向邊緣提前檢查
       function willViolateClosure(pTurns, lastTurn, step) {
           if (totalSteps <= 4 || step < totalSteps - 3) return false;
-          // 若加上最後這步，連同起首前 3 步是否構成 4 連轉
-          const first0 = pTurns[0];
-          const first1 = pTurns[1];
-          const first2 = pTurns[2];
+          const first0 = pTurns[0], first1 = pTurns[1], first2 = pTurns[2];
           if (step === totalSteps - 1) {
               if (lastTurn === pTurns[step - 1] && lastTurn === pTurns[step - 2] && lastTurn === first0) return true;
               if (lastTurn === pTurns[step - 1] && lastTurn === first0 && lastTurn === first1) return true;
@@ -385,13 +367,10 @@
               return;
           }
 
-          // 核心 Held-Karp 下界剪枝
           if (totalSteps - step < estimateLowerBound(x, y, unvisitedMask)) return;
 
-          // 達終點
           if (step === totalSteps) {
               if (x === 0 && y === 0 && unvisitedMask === 0) {
-                  // 雙重驗證閉環 4 連轉
                   if (totalSteps > 4) {
                       let c0 = pathTurns[0], c1 = pathTurns[1], c2 = pathTurns[2];
                       let e0 = pathTurns[totalSteps - 3], e1 = pathTurns[totalSteps - 2], e2 = pathTurns[totalSteps - 1];
@@ -410,7 +389,6 @@
               return;
           }
 
-          // 連續 3 彎禁止轉第 4 彎
           let restricted = 0;
           if (totalSteps > 4 && step >= 3) {
               const t1 = pathTurns[step - 1];
@@ -419,7 +397,6 @@
               }
           }
 
-          // 選擇左右轉
           for (let turnIdx = 0; turnIdx < 2; turnIdx++) {
               const turn = turnIdx === 0 ? 1 : -1;
               const rem = turn === 1 ? leftRem : rightRem;
@@ -438,7 +415,6 @@
               const isHomeStep = (step === totalSteps - 1 && nx === 0 && ny === 0);
               if (visited[nidx] === 1 && !isHomeStep) continue;
 
-              // 目標節點更新
               const targetIdx = targetBitMap[nidx];
               let newMask = unvisitedMask;
               if (targetIdx !== -1) {
@@ -446,7 +422,6 @@
                   if ((unvisitedMask & bit) !== 0) {
                       newMask = unvisitedMask & ~bit;
                   } else {
-                      // 已經造訪過此目標，不可重複造訪
                       continue;
                   }
               }
@@ -485,7 +460,6 @@
           return { status: "error", nodes: [], msg: "❌ 無解：找不到合法封閉迴路。" };
       }
 
-      // 隨機重排解
       for (let i = validPaths.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [validPaths[i], validPaths[j]] = [validPaths[j], validPaths[i]];
@@ -494,7 +468,6 @@
       return { status: "success", data: validPaths, isCapped: isCapped };
   }
 
-  // 整數編碼的足跡雜湊，避免大量字串操作
   function getFootprintInt(startDir, pathTurns, totalSteps) {
       let cx = 0, cy = 0, cdir = startDir;
       let edges = [];
@@ -506,7 +479,6 @@
           const ny = cy + TRANS_DY[transOffset];
           cdir = TRANS_NDIR[transOffset];
 
-          // 將每條無向邊壓成一個 32-bit 整數
           const p1 = (cx + 50) | ((cy + 50) << 7);
           const p2 = (nx + 50) | ((ny + 50) << 7);
           edges.push(p1 < p2 ? (p1 | (p2 << 14)) : (p2 | (p1 << 14)));
@@ -595,6 +567,7 @@
       board.style.width = `calc(${boardSize} * var(--cell))`;
       board.style.height = `calc(${boardSize} * var(--cell))`;
       svgOverlay.setAttribute('viewBox', `-${R + 0.5} -${R + 0.5} ${boardSize} ${boardSize}`);
+      
       document.getElementById('svg-path').setAttribute('d', '');
       document.getElementById('results-container').innerHTML = '';
       clearAllErrors();
@@ -690,7 +663,11 @@
       statusText.innerHTML = "<span class='loader'></span> 運算中...";
       statusText.style.color = "#007bff";
 
-      // 防抖縮短至 40ms，提升互動滑順感
+      // 補回先前遺漏的這三行清理代碼！
+      document.getElementById('svg-path').setAttribute('d', '');
+      document.getElementById('results-container').innerHTML = '';
+      clearAllErrors();
+
       debounceTimer = setTimeout(() => {
           const steps = parseInt(document.getElementById('stepsInput').value, 10);
           const limit = parseInt(document.getElementById('limitInput').value, 10);
@@ -701,7 +678,6 @@
               if (cellStates[k] === 2) obstacles.push([parseInt(parts[0], 10), parseInt(parts[1], 10)]);
           }
 
-          // 構建查詢鍵檢查快取
           const cacheKey = `${steps}_${limit}_${JSON.stringify(targets)}_${JSON.stringify(obstacles)}`;
           let result;
           let elapsed_ms = 0;
