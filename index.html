@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="google" content="notranslate">
-<title>Twisty Turny 純淨終極版 (無伺服器)</title>
+<title>Twisty Turny 極速尋路引擎 (Bitmask & 平坦陣列極限優化版)</title>
 <style>
   :root { --cell: 40px; }
   body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
@@ -76,7 +76,6 @@
   .node.obstacle { font-size: calc(var(--cell) * 0.5); z-index: 6; color: #dc3545; font-weight: bold;}
   .node.center { font-size: calc(var(--cell) * 0.7); z-index: 7; cursor: not-allowed; }
   
-  /* 將 svg-overlay 的 z-index 降到 4，確保它在 .node (5,6,7) 之下 */
   #svg-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       transform: scaleY(-1); pointer-events: none; z-index: 4;
@@ -140,7 +139,7 @@
         👉 點 3 下：恢復空白<br>
     </div>
     <div style="color:#888; font-size: 11.5px; margin-bottom: 8px;">（註：灰色小叉叉 ✖ 代表幾何上永遠無法抵達的死區）</div>
-    <p>出圖：<span style="font-weight: normal;">每次點擊，系統會自動運算並亮起藍色路線。</span></p>
+    <p>出圖：<span style="font-weight: normal;">每次點擊，純靜態系統會自動運算並亮起藍色路線。</span></p>
     <p>點擊更多：<span style="font-weight: normal;">點擊下方的縮圖，可放大檢視，並顯示詳細坐標！</span></p>
   </div>
 
@@ -154,7 +153,7 @@
   </div>
   <button class="btn-reset" onclick="initGrid(true); autoRun();">🗑️ 清空網格</button>
   <div id="statusText" style="color: #666; font-size: 13px; font-weight: bold; text-align: center;">
-    系統就緒。所有運算皆於本地端執行。
+    系統就緒。
   </div>
 </div>
 
@@ -187,231 +186,306 @@
 
 <script>
   /* =========================================================================
-     核心演算法 (Python 完全移植至 JavaScript) 
+     核心演算法 (平坦陣列、Bitmask 與 Held-Karp 極速重構)
   ========================================================================= */
-  const TRANSITIONS = {
-      "0,1": [-1, 1, 3], "0,-1": [1, 1, 1],
-      "1,1": [1, 1, 0], "1,-1": [1, -1, 2],
-      "2,1": [1, -1, 1], "2,-1": [-1, -1, 3],
-      "3,1": [-1, -1, 2], "3,-1": [-1, 1, 0]
-  };
 
-  function getPermutations(arr) {
-      if (arr.length <= 1) return [arr];
-      let result = [];
-      for (let i = 0; i < arr.length; i++) {
-          let current = arr[i];
-          let remaining = arr.slice(0, i).concat(arr.slice(i + 1));
-          let remainingPerms = getPermutations(remaining);
-          for (let perm of remainingPerms) {
-              result.push([current].concat(perm));
+  // 扁平化轉移矩陣: [cdir][turn_idx] -> [dx, dy, ndir]
+  // cdir: 0..3, turn: +1 (0), -1 (1)
+  const TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
+  const TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
+  const TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
+
+  // 結果快取 (避免重複拖曳滑桿時重算)
+  const queryCache = new Map();
+
+  function solveTwistyTurnyOptimized(totalSteps, rawTargets, rawObstacles, requiredCount) {
+      const R = Math.floor(totalSteps / 2);
+      const W = 2 * R + 1;
+      const totalCells = W * W;
+
+      // 快速座標轉 index
+      const getIdx = (x, y) => (y + R) * W + (x + R);
+
+      // 目標點前處理 (排除起點 0,0)
+      const targets = [];
+      for (let i = 0; i < rawTargets.length; i++) {
+          const t = rawTargets[i];
+          if (t[0] !== 0 || t[1] !== 0) targets.push(t);
+      }
+      const K = targets.length;
+      if (K > 20) return { status: "error", nodes: [], msg: "❌ 目標點過多 (上限 20 個)！" };
+
+      // 檢查障礙與奇偶性
+      const obstacleMap = new Uint8Array(totalCells);
+      for (let i = 0; i < rawObstacles.length; i++) {
+          const o = rawObstacles[i];
+          if (Math.abs(o[0]) <= R && Math.abs(o[1]) <= R) {
+              obstacleMap[getIdx(o[0], o[1])] = 1;
           }
       }
-      return result;
-  }
 
-  function getFootprint(start_dir, path_turns) {
-      let cx = 0, cy = 0, cdir = start_dir;
-      let edges = [];
-      for (let t of path_turns) {
-          let trans = TRANSITIONS[`${cdir},${t}`];
-          let nx = cx + trans[0], ny = cy + trans[1], ndir = trans[2];
-          let x1 = cx, y1 = cy, x2 = nx, y2 = ny;
-          if (x1 > x2 || (x1 === x2 && y1 > y2)) { x1 = nx; y1 = ny; x2 = cx; y2 = cy; }
-          edges.push(`${x1},${y1}-${x2},${y2}`);
-          cx = nx; cy = ny; cdir = ndir;
-      }
-      edges.sort();
-      return edges.join("|");
-  }
-
-  function solveTwistyTurny(totalSteps, targets, obstacles, requiredCount) {
-      let targetSet = new Set(targets.filter(t => t[0] !== 0 || t[1] !== 0).map(t => `${t[0]},${t[1]}`));
-      let obstacleSet = new Set(obstacles.map(o => `${o[0]},${o[1]}`));
-      
-      if (obstacleSet.has("0,0")) return { status: "error", nodes: ["0,0"], msg: "❌ 起點 (0,0) 不能是障礙物！" };
-      for (let t of targetSet) {
-          if (obstacleSet.has(t)) return { status: "error", nodes: [t], msg: "❌ 目標與障礙物重疊！" };
-          let parts = t.split(',').map(Number);
-          if ((Math.abs(parts[0]) + Math.abs(parts[1])) % 2 !== 0) return { status: "error", nodes: [t], msg: "❌ 目標奇偶性錯誤，永遠無法抵達。" };
+      if (obstacleMap[getIdx(0, 0)] === 1) {
+          return { status: "error", nodes: ["0,0"], msg: "❌ 起點 (0,0) 不能是障礙物！" };
       }
 
-      function calcExactMinSteps(unvisited) {
-          let pts = Array.from(unvisited).map(s => s.split(',').map(Number));
-          if (pts.length === 0) return 0;
-          if (pts.length > 6) {
-              let maxD = 0;
-              for (let p of pts) maxD = Math.max(maxD, Math.max(Math.abs(p[0]), Math.abs(p[1])) + Math.max(Math.abs(p[0]-0), Math.abs(p[1]-0)));
-              return maxD;
+      for (let i = 0; i < K; i++) {
+          const tx = targets[i][0], ty = targets[i][1];
+          if (Math.abs(tx) > R || Math.abs(ty) > R) {
+              return { status: "error", nodes: [`${tx},${ty}`], msg: "❌ 目標超出步數可達範圍！" };
           }
-          let min_dist = Infinity;
-          for (let perm of getPermutations(pts)) {
-              let dist = 0, cx = 0, cy = 0;
-              for (let p of perm) {
-                  dist += Math.max(Math.abs(p[0] - cx), Math.abs(p[1] - cy));
-                  cx = p[0]; cy = p[1];
+          if (obstacleMap[getIdx(tx, ty)] === 1) {
+              return { status: "error", nodes: [`${tx},${ty}`], msg: "❌ 目標與障礙物重疊！" };
+          }
+          if ((Math.abs(tx) + Math.abs(ty)) % 2 !== 0) {
+              return { status: "error", nodes: [`${tx},${ty}`], msg: "❌ 目標奇偶性錯誤，永遠無法抵達。" };
+          }
+      }
+
+      // 幾何距離預估下界 (TSP 距離)
+      const dist = (x1, y1, x2, y2) => Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
+
+      // 距離矩陣: 0 為起點，1..K 為 targets[0..K-1]
+      const P = K + 1;
+      const distMat = new Int32Array(P * P);
+      const ptsX = new Int32Array(P);
+      const ptsY = new Int32Array(P);
+      ptsX[0] = 0; ptsY[0] = 0;
+      for (let i = 0; i < K; i++) {
+          ptsX[i + 1] = targets[i][0];
+          ptsY[i + 1] = targets[i][1];
+      }
+      for (let i = 0; i < P; i++) {
+          for (let j = 0; j < P; j++) {
+              distMat[i * P + j] = dist(ptsX[i], ptsY[i], ptsX[j], ptsY[j]);
+          }
+      }
+
+      // Held-Karp TSP 動態規劃預算: dp[mask][i]
+      const numMasks = 1 << K;
+      const dp = new Int32Array(numMasks * K);
+      dp.fill(-1);
+
+      function getTspDist(mask, lastIdx) {
+          if (mask === 0) return distMat[(lastIdx + 1) * P + 0]; // 回到起點
+          const memoKey = mask * K + lastIdx;
+          if (dp[memoKey] !== -1) return dp[memoKey];
+
+          let minVal = 1e9;
+          for (let next = 0; next < K; next++) {
+              if ((mask & (1 << next)) !== 0) {
+                  const subMask = mask & ~(1 << next);
+                  const cost = distMat[(lastIdx + 1) * P + (next + 1)] + getTspDist(subMask, next);
+                  if (cost < minVal) minVal = cost;
               }
-              dist += Math.max(Math.abs(cx), Math.abs(cy));
-              min_dist = Math.min(min_dist, dist);
           }
-          return min_dist;
+          dp[memoKey] = minVal;
+          return minVal;
       }
 
-      let minRequired = calcExactMinSteps(targetSet);
-      if (minRequired > totalSteps) return { status: "error", nodes: Array.from(targetSet), msg: `❌ 步數不足：最少需 ${minRequired} 步。` };
+      // 起點出發的精確最短需求步數
+      let minRequired = 0;
+      if (K > 0) {
+          minRequired = 1e9;
+          for (let first = 0; first < K; first++) {
+              const cost = distMat[0 * P + (first + 1)] + getTspDist((numMasks - 1) & ~(1 << first), first);
+              if (cost < minRequired) minRequired = cost;
+          }
+      }
+      if (minRequired > totalSteps) {
+          return { status: "error", nodes: targets.map(t => `${t[0]},${t[1]}`), msg: `❌ 步數不足：最少需 ${minRequired} 步。` };
+      }
 
-      let waterQueue = [[0, 0]];
-      let floodedArea = new Set(["0,0"]);
-      let maxReach = Math.floor(totalSteps / 2) + 1;
-      let head = 0;
-      while (head < waterQueue.length) {
-          let cx = waterQueue[head][0], cy = waterQueue[head][1];
-          head++;
-          let dirs = [[-1, 1], [1, 1], [-1, -1], [1, -1]];
-          for (let d of dirs) {
-              let nx = cx + d[0], ny = cy + d[1];
-              if (Math.abs(nx) <= maxReach && Math.abs(ny) <= maxReach) {
-                  let key = `${nx},${ny}`;
-                  if (!floodedArea.has(key) && !obstacleSet.has(key)) {
-                      floodedArea.add(key);
-                      waterQueue.push([nx, ny]);
+      // Flood Fill 孤島連通性檢驗 (BFS, 使用 TypedArray 隊列)
+      const qX = new Int32Array(totalCells);
+      const qY = new Int32Array(totalCells);
+      const flooded = new Uint8Array(totalCells);
+      let qHead = 0, qTail = 0;
+
+      qX[qTail] = 0; qY[qTail] = 0; qTail++;
+      flooded[getIdx(0, 0)] = 1;
+
+      const fdx = [-1, 1, -1, 1];
+      const fdy = [1, 1, -1, -1];
+      while (qHead < qTail) {
+          const cx = qX[qHead], cy = qY[qHead]; qHead++;
+          for (let d = 0; d < 4; d++) {
+              const nx = cx + fdx[d], ny = cy + fdy[d];
+              if (Math.abs(nx) <= R && Math.abs(ny) <= R) {
+                  const nidx = getIdx(nx, ny);
+                  if (flooded[nidx] === 0 && obstacleMap[nidx] === 0) {
+                      flooded[nidx] = 1;
+                      qX[qTail] = nx; qY[qTail] = ny; qTail++;
                   }
               }
           }
       }
 
-      for (let t of targetSet) {
-          if (!floodedArea.has(t)) return { status: "error", nodes: [t], msg: "❌ 目標被孤立或超出極限範圍！" };
-      }
-
-      let cache = new Map();
-      function getMinSteps(currX, currY, unvisitedTargets) {
-          if (unvisitedTargets.size === 0) return Math.max(Math.abs(currX), Math.abs(currY));
-          let stateKey = `${currX},${currY}|${Array.from(unvisitedTargets).sort().join(';')}`;
-          if (cache.has(stateKey)) return cache.get(stateKey);
-          
-          let pts = Array.from(unvisitedTargets).map(s => s.split(',').map(Number));
-          let res;
-          if (pts.length > 5) {
-              res = 0;
-              for (let p of pts) res = Math.max(res, Math.max(Math.abs(p[0] - currX), Math.abs(p[1] - currY)));
-          } else {
-              let minDist = Infinity;
-              for (let perm of getPermutations(pts)) {
-                  let dist = 0, cx = currX, cy = currY;
-                  for (let p of perm) {
-                      dist += Math.max(Math.abs(p[0] - cx), Math.abs(p[1] - cy));
-                      cx = p[0]; cy = p[1];
-                  }
-                  dist += Math.max(Math.abs(cx), Math.abs(cy));
-                  minDist = Math.min(minDist, dist);
-              }
-              res = minDist;
+      for (let i = 0; i < K; i++) {
+          const tx = targets[i][0], ty = targets[i][1];
+          if (flooded[getIdx(tx, ty)] === 0) {
+              return { status: "error", nodes: [`${tx},${ty}`], msg: "❌ 目標被孤立或超出極限範圍！" };
           }
-          cache.set(stateKey, res);
-          return res;
       }
 
-      function minDistToTargets(cx, cy, unvisited) {
-          if (unvisited.size === 0) return Math.max(Math.abs(cx), Math.abs(cy));
-          let pts = Array.from(unvisited).map(s => s.split(',').map(Number));
-          let md = Infinity;
-          for(let p of pts) md = Math.min(md, Math.max(Math.abs(cx-p[0]), Math.abs(cy-p[1])));
-          return md;
+      // 目標點座標至 Bitmask 索引反查表
+      const targetBitMap = new Int8Array(totalCells);
+      targetBitMap.fill(-1);
+      for (let i = 0; i < K; i++) {
+          targetBitMap[getIdx(targets[i][0], targets[i][1])] = i;
       }
 
-      let quotas = [
+      // 啟動零 GC 的 DFS
+      const visited = new Uint8Array(totalCells);
+      visited[getIdx(0, 0)] = 1;
+
+      const pathTurns = new Int8Array(totalSteps);
+      const validPaths = [];
+      const seenFootprints = new Set();
+      const quotas = [
           [Math.floor((totalSteps + 4) / 2), Math.floor((totalSteps - 4) / 2)],
           [Math.floor((totalSteps - 4) / 2), Math.floor((totalSteps + 4) / 2)]
       ];
-      
-      let validPaths = [];
-      let seenFootprints = new Set();
+
       let isCapped = false;
-      let startTime = performance.now();
-      let targetSearchLimit = Math.max(30, requiredCount * 2);
-      
-      let startDirs = [0, 1, 2, 3];
-      startDirs.sort(() => Math.random() - 0.5);
+      const startTime = performance.now();
+      const targetSearchLimit = Math.max(30, requiredCount * 2);
 
-      for (let startDir of startDirs) {
-          for (let q of quotas) {
-              let visited = new Set(["0,0"]);
-              
-              function dfs(step, x, y, currDir, leftRem, rightRem, unvisited, pathTurns) {
-                  if (isCapped) return;
-                  if (validPaths.length >= targetSearchLimit || (performance.now() - startTime > 1500)) {
-                      isCapped = true; return;
-                  }
-                  if (totalSteps - step < getMinSteps(x, y, unvisited)) return;
+      // 動態估算當前座標到未訪目標的最短下界
+      function estimateLowerBound(cx, cy, mask) {
+          if (mask === 0) return Math.max(Math.abs(cx), Math.abs(cy));
+          let minVal = 1e9;
+          for (let next = 0; next < K; next++) {
+              if ((mask & (1 << next)) !== 0) {
+                  const cost = dist(cx, cy, ptsX[next + 1], ptsY[next + 1]) + getTspDist(mask & ~(1 << next), next);
+                  if (cost < minVal) minVal = cost;
+              }
+          }
+          return minVal;
+      }
 
-                  if (step === totalSteps) {
-                      if (x === 0 && y === 0 && unvisited.size === 0) {
-                          if (totalSteps > 4) {
-                              let ext = pathTurns.concat(pathTurns.slice(0, 3));
-                              for (let i = 0; i < ext.length - 3; i++) {
-                                  if (ext[i] === ext[i+1] && ext[i+1] === ext[i+2] && ext[i+2] === ext[i+3]) return;
-                              }
-                          }
-                          let footprint = getFootprint(startDir, pathTurns);
-                          if (!seenFootprints.has(footprint)) {
-                              seenFootprints.add(footprint);
-                              validPaths.push([startDir, [...pathTurns]]);
-                          }
-                      }
-                      return;
-                  }
+      // 環狀同向邊緣提前檢查
+      function willViolateClosure(pTurns, lastTurn, step) {
+          if (totalSteps <= 4 || step < totalSteps - 3) return false;
+          // 若加上最後這步，連同起首前 3 步是否構成 4 連轉
+          const first0 = pTurns[0];
+          const first1 = pTurns[1];
+          const first2 = pTurns[2];
+          if (step === totalSteps - 1) {
+              if (lastTurn === pTurns[step - 1] && lastTurn === pTurns[step - 2] && lastTurn === first0) return true;
+              if (lastTurn === pTurns[step - 1] && lastTurn === first0 && lastTurn === first1) return true;
+              if (lastTurn === first0 && lastTurn === first1 && lastTurn === first2) return true;
+          }
+          return false;
+      }
 
-                  let restricted = 0;
-                  if (totalSteps > 4 && step >= 3 && pathTurns[pathTurns.length-1] === pathTurns[pathTurns.length-2] && pathTurns[pathTurns.length-2] === pathTurns[pathTurns.length-3]) {
-                      restricted = pathTurns[pathTurns.length-1];
-                  }
+      function dfs(step, x, y, cdir, leftRem, rightRem, unvisitedMask, startDir) {
+          if (isCapped) return;
+          if (validPaths.length >= targetSearchLimit || (performance.now() - startTime > 1500)) {
+              isCapped = true;
+              return;
+          }
 
-                  let validChoices = [];
-                  let turns = [[1, leftRem], [-1, rightRem]];
-                  for (let tv of turns) {
-                      let turn = tv[0], rem = tv[1];
-                      if (rem > 0 && turn !== restricted) {
-                          let trans = TRANSITIONS[`${currDir},${turn}`];
-                          let nx = x + trans[0], ny = y + trans[1], nextDir = trans[2];
-                          let nKey = `${nx},${ny}`;
-                          
-                          if (obstacleSet.has(nKey)) continue;
-                          let isHomeStep = (step === totalSteps - 1 && nx === 0 && ny === 0);
-                          if (visited.has(nKey) && !isHomeStep) continue;
-                          
-                          let d = minDistToTargets(nx, ny, unvisited);
-                          let noiseWeight = Math.max(0.1, 1.0 - (step / totalSteps));
-                          let score = d + (Math.random() * noiseWeight);
-                          validChoices.push({score, turn, nx, ny, nextDir, nKey, isHomeStep});
+          // 核心 Held-Karp 下界剪枝
+          if (totalSteps - step < estimateLowerBound(x, y, unvisitedMask)) return;
+
+          // 達終點
+          if (step === totalSteps) {
+              if (x === 0 && y === 0 && unvisitedMask === 0) {
+                  // 雙重驗證閉環 4 連轉
+                  if (totalSteps > 4) {
+                      let c0 = pathTurns[0], c1 = pathTurns[1], c2 = pathTurns[2];
+                      let e0 = pathTurns[totalSteps - 3], e1 = pathTurns[totalSteps - 2], e2 = pathTurns[totalSteps - 1];
+                      if ((e0 === e1 && e1 === e2 && e2 === c0) ||
+                          (e1 === e2 && e2 === c0 && c0 === c1) ||
+                          (e2 === c0 && c0 === c1 && c1 === c2)) {
+                          return;
                       }
                   }
+                  const fp = getFootprintInt(startDir, pathTurns, totalSteps);
+                  if (!seenFootprints.has(fp)) {
+                      seenFootprints.add(fp);
+                      validPaths.push([startDir, Array.from(pathTurns)]);
+                  }
+              }
+              return;
+          }
 
-                  validChoices.sort((a, b) => a.score - b.score);
+          // 連續 3 彎禁止轉第 4 彎
+          let restricted = 0;
+          if (totalSteps > 4 && step >= 3) {
+              const t1 = pathTurns[step - 1];
+              if (t1 === pathTurns[step - 2] && t1 === pathTurns[step - 3]) {
+                  restricted = t1;
+              }
+          }
 
-                  for (let choice of validChoices) {
-                      let newUnvisited = new Set(unvisited);
-                      if (newUnvisited.has(choice.nKey)) newUnvisited.delete(choice.nKey);
-                      else if (targetSet.has(choice.nKey)) continue;
+          // 選擇左右轉
+          for (let turnIdx = 0; turnIdx < 2; turnIdx++) {
+              const turn = turnIdx === 0 ? 1 : -1;
+              const rem = turn === 1 ? leftRem : rightRem;
+              if (rem <= 0 || turn === restricted) continue;
 
-                      if (!choice.isHomeStep) visited.add(choice.nKey);
-                      pathTurns.push(choice.turn);
-                      
-                      dfs(step + 1, choice.nx, choice.ny, choice.nextDir, leftRem - (choice.turn === 1 ? 1 : 0), rightRem - (choice.turn === -1 ? 1 : 0), newUnvisited, pathTurns);
-                      
-                      pathTurns.pop();
-                      if (!choice.isHomeStep) visited.delete(choice.nKey);
+              if (willViolateClosure(pathTurns, turn, step)) continue;
+
+              const transOffset = (cdir << 1) | turnIdx;
+              const nx = x + TRANS_DX[transOffset];
+              const ny = y + TRANS_DY[transOffset];
+              if (Math.abs(nx) > R || Math.abs(ny) > R) continue;
+
+              const nidx = getIdx(nx, ny);
+              if (obstacleMap[nidx] === 1) continue;
+
+              const isHomeStep = (step === totalSteps - 1 && nx === 0 && ny === 0);
+              if (visited[nidx] === 1 && !isHomeStep) continue;
+
+              // 目標節點更新
+              const targetIdx = targetBitMap[nidx];
+              let newMask = unvisitedMask;
+              if (targetIdx !== -1) {
+                  const bit = 1 << targetIdx;
+                  if ((unvisitedMask & bit) !== 0) {
+                      newMask = unvisitedMask & ~bit;
+                  } else {
+                      // 已經造訪過此目標，不可重複造訪
+                      continue;
                   }
               }
 
-              dfs(0, 0, 0, startDir, q[0], q[1], targetSet, []);
+              if (!isHomeStep) visited[nidx] = 1;
+              pathTurns[step] = turn;
+
+              dfs(step + 1, nx, ny, TRANS_NDIR[transOffset],
+                  leftRem - (turn === 1 ? 1 : 0),
+                  rightRem - (turn === -1 ? 1 : 0),
+                  newMask, startDir);
+
+              if (!isHomeStep) visited[nidx] = 0;
+          }
+      }
+
+      const startDirs = [0, 1, 2, 3];
+      for (let i = startDirs.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [startDirs[i], startDirs[j]] = [startDirs[j], startDirs[i]];
+      }
+
+      const initialMask = (1 << K) - 1;
+      for (let s = 0; s < 4; s++) {
+          const sDir = startDirs[s];
+          for (let q = 0; q < 2; q++) {
+              visited.fill(0);
+              visited[getIdx(0, 0)] = 1;
+              dfs(0, 0, 0, sDir, quotas[q][0], quotas[q][1], initialMask, sDir);
               if (isCapped && validPaths.length > 0) break;
           }
           if (isCapped && validPaths.length > 0) break;
       }
 
-      if (validPaths.length === 0) return { status: "error", nodes: [], msg: "❌ 無解：找不到合法封閉迴路。" };
-      
+      if (validPaths.length === 0) {
+          return { status: "error", nodes: [], msg: "❌ 無解：找不到合法封閉迴路。" };
+      }
+
+      // 隨機重排解
       for (let i = validPaths.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [validPaths[i], validPaths[j]] = [validPaths[j], validPaths[i]];
@@ -420,126 +494,156 @@
       return { status: "success", data: validPaths, isCapped: isCapped };
   }
 
+  // 整數編碼的足跡雜湊，避免大量字串操作
+  function getFootprintInt(startDir, pathTurns, totalSteps) {
+      let cx = 0, cy = 0, cdir = startDir;
+      let edges = [];
+      for (let i = 0; i < totalSteps; i++) {
+          const turn = pathTurns[i];
+          const turnIdx = turn === 1 ? 0 : 1;
+          const transOffset = (cdir << 1) | turnIdx;
+          const nx = cx + TRANS_DX[transOffset];
+          const ny = cy + TRANS_DY[transOffset];
+          cdir = TRANS_NDIR[transOffset];
+
+          // 將每條無向邊壓成一個 32-bit 整數
+          const p1 = (cx + 50) | ((cy + 50) << 7);
+          const p2 = (nx + 50) | ((ny + 50) << 7);
+          edges.push(p1 < p2 ? (p1 | (p2 << 14)) : (p2 | (p1 << 14)));
+          cx = nx; cy = ny;
+      }
+      edges.sort((a, b) => a - b);
+      return edges.join(",");
+  }
+
   function generateSvgPath(currDirStart, pathTurns) {
       let svgD = "M 0 0";
       let cx = 0, cy = 0, cdir = currDirStart;
-      for (let turn of pathTurns) {
-          let trans = TRANSITIONS[`${cdir},${turn}`];
-          let nx = cx + trans[0], ny = cy + trans[1], ndir = trans[2];
-          let sweep = turn === 1 ? 1 : 0;
+      for (let i = 0; i < pathTurns.length; i++) {
+          const turn = pathTurns[i];
+          const turnIdx = turn === 1 ? 0 : 1;
+          const transOffset = (cdir << 1) | turnIdx;
+          const nx = cx + TRANS_DX[transOffset];
+          const ny = cy + TRANS_DY[transOffset];
+          cdir = TRANS_NDIR[transOffset];
+          const sweep = turn === 1 ? 1 : 0;
           svgD += ` A 1 1 0 0 ${sweep} ${nx} ${ny}`;
-          cx = nx; cy = ny; cdir = ndir;
+          cx = nx; cy = ny;
       }
       return svgD;
   }
 
-  // 取得路徑與物件的動態邊界，用於精確裁切縮圖與放大圖
   function getBounds(startDir, pathTurns, targets, obstacles) {
       let minX = 0, maxX = 0, minY = 0, maxY = 0;
       let cx = 0, cy = 0, cdir = startDir;
-      for (let turn of pathTurns) {
-          let trans = TRANSITIONS[`${cdir},${turn}`];
-          cx += trans[0]; cy += trans[1]; cdir = trans[2];
+      for (let i = 0; i < pathTurns.length; i++) {
+          const turn = pathTurns[i];
+          const turnIdx = turn === 1 ? 0 : 1;
+          const transOffset = (cdir << 1) | turnIdx;
+          cx += TRANS_DX[transOffset];
+          cy += TRANS_DY[transOffset];
+          cdir = TRANS_NDIR[transOffset];
           if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
           if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
       }
-      targets.forEach(t => {
+      for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
           if (t[0] < minX) minX = t[0]; if (t[0] > maxX) maxX = t[0];
           if (t[1] < minY) minY = t[1]; if (t[1] > maxY) maxY = t[1];
-      });
-      obstacles.forEach(o => {
+      }
+      for (let i = 0; i < obstacles.length; i++) {
+          const o = obstacles[i];
           if (o[0] < minX) minX = o[0]; if (o[0] > maxX) maxX = o[0];
           if (o[1] < minY) minY = o[1]; if (o[1] > maxY) maxY = o[1];
-      });
-      return {minX, maxX, minY, maxY};
+      }
+      return { minX, maxX, minY, maxY };
   }
 
   /* =========================================================================
-     DOM 控制與事件綁定
+     畫面渲染與互動事件
   ========================================================================= */
   let cellStates = {};
   let debounceTimer;
 
   function clearAllErrors() {
-    document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
+      document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
   }
 
   function toggleNode(x, y, el) {
-    if(x === 0 && y === 0) return;
-    let key = `${x},${y}`;
-    let st = cellStates[key] || 0;
-    st = (st + 1) % 3;
-    if(st === 0) delete cellStates[key]; else cellStates[key] = st;
+      if (x === 0 && y === 0) return;
+      const key = `${x},${y}`;
+      let st = cellStates[key] || 0;
+      st = (st + 1) % 3;
+      if (st === 0) delete cellStates[key]; else cellStates[key] = st;
 
-    el.className = 'node valid-parity'; el.innerHTML = '';
-    if(st === 1) { el.classList.add('target'); el.innerHTML = '⭐'; }
-    if(st === 2) { el.classList.add('obstacle'); el.innerHTML = '❌'; }
-    autoRun(); 
+      el.className = 'node valid-parity'; el.innerHTML = '';
+      if (st === 1) { el.classList.add('target'); el.innerHTML = '⭐'; }
+      if (st === 2) { el.classList.add('obstacle'); el.innerHTML = '❌'; }
+      autoRun();
   }
 
   function initGrid(forceClear = false) {
-    if(forceClear) cellStates = {};
-    let steps = parseInt(document.getElementById('stepsInput').value);
-    let R = Math.floor(steps / 2);
-    let board = document.getElementById('board');
-    let axisX = document.getElementById('axis-x-inner');
-    let axisY = document.getElementById('axis-y-inner');
-    let svgOverlay = document.getElementById('svg-overlay');
+      if (forceClear) cellStates = {};
+      const steps = parseInt(document.getElementById('stepsInput').value, 10);
+      const R = Math.floor(steps / 2);
+      const board = document.getElementById('board');
+      const axisX = document.getElementById('axis-x-inner');
+      const axisY = document.getElementById('axis-y-inner');
+      const svgOverlay = document.getElementById('svg-overlay');
 
-    let boardSize = 2 * R + 1;
-    board.style.width = `calc(${boardSize} * var(--cell))`;
-    board.style.height = `calc(${boardSize} * var(--cell))`;
-    svgOverlay.setAttribute('viewBox', `-${R + 0.5} -${R + 0.5} ${boardSize} ${boardSize}`);
-    document.getElementById('svg-path').setAttribute('d', ''); 
-    document.getElementById('results-container').innerHTML = '';
-    clearAllErrors();
+      const boardSize = 2 * R + 1;
+      board.style.width = `calc(${boardSize} * var(--cell))`;
+      board.style.height = `calc(${boardSize} * var(--cell))`;
+      svgOverlay.setAttribute('viewBox', `-${R + 0.5} -${R + 0.5} ${boardSize} ${boardSize}`);
+      document.getElementById('svg-path').setAttribute('d', '');
+      document.getElementById('results-container').innerHTML = '';
+      clearAllErrors();
 
-    Array.from(board.children).forEach(c => { if(c.id !== 'svg-overlay') board.removeChild(c); });
-    axisX.innerHTML = ''; axisY.innerHTML = '';
-    
-    let pad = 15;
-    for(let x = -R; x <= R; x++) {
-        let lx = document.createElement('div'); lx.className = 'axis-label-x';
-        lx.style.left = `calc(${x + R + 0.5} * var(--cell) + ${pad}px)`; lx.innerText = x; axisX.appendChild(lx);
-    }
-    for(let y = R; y >= -R; y--) {
-        let ly = document.createElement('div'); ly.className = 'axis-label-y';
-        ly.style.top = `calc(${R - y + 0.5} * var(--cell) + ${pad}px)`; ly.innerText = y; axisY.appendChild(ly);
-    }
+      Array.from(board.children).forEach(c => { if (c.id !== 'svg-overlay') board.removeChild(c); });
+      axisX.innerHTML = ''; axisY.innerHTML = '';
 
-    for(let y = R; y >= -R; y--) {
-      for(let x = -R; x <= R; x++) {
-        let node = document.createElement('div');
-        node.className = 'node';
-        node.dataset.coord = `${x},${y}`;
-        node.style.left = `calc(${x + R + 0.5} * var(--cell))`;
-        node.style.top = `calc(${R - y + 0.5} * var(--cell))`;
-
-        if ((Math.abs(x) + Math.abs(y)) % 2 !== 0) {
-            node.classList.add('invalid-parity');
-        } else {
-            node.classList.add('valid-parity');
-            if(x === 0 && y === 0) {
-              node.classList.add('center'); node.innerHTML = '🏠';
-            } else {
-              if(cellStates[`${x},${y}`] === 1) { node.classList.add('target'); node.innerHTML = '⭐'; }
-              if(cellStates[`${x},${y}`] === 2) { node.classList.add('obstacle'); node.innerHTML = '❌'; }
-              node.onclick = () => toggleNode(x, y, node);
-            }
-        }
-        board.appendChild(node);
+      const pad = 15;
+      for (let x = -R; x <= R; x++) {
+          const lx = document.createElement('div'); lx.className = 'axis-label-x';
+          lx.style.left = `calc(${x + R + 0.5} * var(--cell) + ${pad}px)`; lx.innerText = x; axisX.appendChild(lx);
       }
-    }
+      for (let y = R; y >= -R; y--) {
+          const ly = document.createElement('div'); ly.className = 'axis-label-y';
+          ly.style.top = `calc(${R - y + 0.5} * var(--cell) + ${pad}px)`; ly.innerText = y; axisY.appendChild(ly);
+      }
+
+      for (let y = R; y >= -R; y--) {
+          for (let x = -R; x <= R; x++) {
+              const node = document.createElement('div');
+              node.className = 'node';
+              node.dataset.coord = `${x},${y}`;
+              node.style.left = `calc(${x + R + 0.5} * var(--cell))`;
+              node.style.top = `calc(${R - y + 0.5} * var(--cell))`;
+
+              if ((Math.abs(x) + Math.abs(y)) % 2 !== 0) {
+                  node.classList.add('invalid-parity');
+              } else {
+                  node.classList.add('valid-parity');
+                  if (x === 0 && y === 0) {
+                      node.classList.add('center'); node.innerHTML = '🏠';
+                  } else {
+                      if (cellStates[`${x},${y}`] === 1) { node.classList.add('target'); node.innerHTML = '⭐'; }
+                      if (cellStates[`${x},${y}`] === 2) { node.classList.add('obstacle'); node.innerHTML = '❌'; }
+                      node.onclick = () => toggleNode(x, y, node);
+                  }
+              }
+              board.appendChild(node);
+          }
+      }
   }
 
-  // 根據動態邊界繪製網格
   function renderSvgGrid(minX, maxX, minY, maxY, padding) {
       let grid = '';
-      let startX = Math.floor(minX - padding);
-      let endX = Math.ceil(maxX + padding);
-      let startY = Math.floor(minY - padding);
-      let endY = Math.ceil(maxY + padding);
-      
+      const startX = Math.floor(minX - padding);
+      const endX = Math.ceil(maxX + padding);
+      const startY = Math.floor(minY - padding);
+      const endY = Math.ceil(maxY + padding);
+
       for (let i = startY; i <= endY; i++) {
           grid += `<line x1="${startX}" y1="${i}" x2="${endX}" y2="${i}" stroke="#e0e0e0" stroke-width="0.05"/>`;
       }
@@ -551,13 +655,11 @@
 
   function renderSvgFeatures(targets, obstacles) {
       let feats = `<circle cx="0" cy="0" r="0.25" fill="#222"/>`;
-      
       targets.forEach(t => {
-          let cx = t[0], cy = t[1];
-          let starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
+          const cx = t[0], cy = t[1];
+          const starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
           feats += `<polygon points="${starPoints}" fill="gold" stroke="#c69500" stroke-width="0.05" stroke-linejoin="round"/>`;
       });
-      
       obstacles.forEach(o => {
           feats += `<line x1="${o[0]-0.3}" y1="${o[1]-0.3}" x2="${o[0]+0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
           feats += `<line x1="${o[0]+0.3}" y1="${o[1]-0.3}" x2="${o[0]-0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
@@ -568,8 +670,7 @@
   window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml) {
       document.getElementById('modal-title').innerText = title;
       document.querySelector('.modal-svg').setAttribute('viewBox', viewBox);
-      
-      let combinedSvg = `
+      const combinedSvg = `
           ${gridHtml}
           <path d="${svgPathD}" fill="none" stroke="#007bff" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.4));"/>
           ${featsHtml}
@@ -577,96 +678,102 @@
       document.getElementById('modal-svg-content').innerHTML = combinedSvg;
       document.getElementById('modal-info').innerHTML = infoHtml;
       document.getElementById('modal-overlay').style.display = 'flex';
-  }
-  
+  };
+
   window.closeModal = function() {
       document.getElementById('modal-overlay').style.display = 'none';
-  }
+  };
 
   function autoRun() {
-    clearTimeout(debounceTimer);
-    let statusText = document.getElementById('statusText');
-    statusText.innerHTML = "<span class='loader'></span> 運算中...";
-    statusText.style.color = "#007bff";
-    
-    document.getElementById('svg-path').setAttribute('d', ''); 
-    document.getElementById('results-container').innerHTML = '';
-    clearAllErrors();
+      clearTimeout(debounceTimer);
+      const statusText = document.getElementById('statusText');
+      statusText.innerHTML = "<span class='loader'></span> 運算中...";
+      statusText.style.color = "#007bff";
 
-    debounceTimer = setTimeout(() => {
-        let steps = parseInt(document.getElementById('stepsInput').value);
-        let limit = parseInt(document.getElementById('limitInput').value);
-        let targets = [], obstacles = [];
-        for(let k in cellStates) {
-           let parts = k.split(',');
-           if(cellStates[k] === 1) targets.push([parseInt(parts[0]), parseInt(parts[1])]);
-           if(cellStates[k] === 2) obstacles.push([parseInt(parts[0]), parseInt(parts[1])]);
-        }
+      // 防抖縮短至 40ms，提升互動滑順感
+      debounceTimer = setTimeout(() => {
+          const steps = parseInt(document.getElementById('stepsInput').value, 10);
+          const limit = parseInt(document.getElementById('limitInput').value, 10);
+          const targets = [], obstacles = [];
+          for (const k in cellStates) {
+              const parts = k.split(',');
+              if (cellStates[k] === 1) targets.push([parseInt(parts[0], 10), parseInt(parts[1], 10)]);
+              if (cellStates[k] === 2) obstacles.push([parseInt(parts[0], 10), parseInt(parts[1], 10)]);
+          }
 
-        let start_time = performance.now();
-        let result = solveTwistyTurny(steps, targets, obstacles, limit);
-        let elapsed_ms = performance.now() - start_time;
+          // 構建查詢鍵檢查快取
+          const cacheKey = `${steps}_${limit}_${JSON.stringify(targets)}_${JSON.stringify(obstacles)}`;
+          let result;
+          let elapsed_ms = 0;
 
-        if (result.status === 'success') {
-            let validPaths = result.data;
-            let chosenPaths = validPaths.slice(0, limit);
-            let mainSvg = generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]);
-            
-            let capMsg = result.isCapped ? " (⚠️達到多樣性上限自動收斂)" : "";
-            let msg = `✅ 極速出圖！為您展示 ${chosenPaths.length} 組路線 ${capMsg} (${elapsed_ms.toFixed(1)}ms)`;
-            statusText.innerText = msg;
-            statusText.style.color = "#28a745";
-            document.getElementById('svg-path').setAttribute('d', mainSvg);
-            
-            let resDiv = document.getElementById('results-container');
-            resDiv.innerHTML = ''; 
-            
-            let featsHtml = renderSvgFeatures(targets, obstacles);
-            let tStr = targets.length > 0 ? targets.map(t => `<span class="coord-tag">(${t[0]}, ${t[1]})</span>`).join('') : "無";
-            let oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : "無";
-            let infoHtml = `<div style="margin-bottom:8px;"><strong>⭐ 目標點：</strong><br>${tStr}</div><div><strong>❌ 障礙物：</strong><br>${oStr}</div>`;
+          if (queryCache.has(cacheKey)) {
+              result = queryCache.get(cacheKey);
+          } else {
+              const start_time = performance.now();
+              result = solveTwistyTurnyOptimized(steps, targets, obstacles, limit);
+              elapsed_ms = performance.now() - start_time;
+              if (result.status === 'success') {
+                  if (queryCache.size > 20) queryCache.delete(queryCache.keys().next().value);
+                  queryCache.set(cacheKey, result);
+              }
+          }
 
-            chosenPaths.forEach((pathObj, idx) => {
-                let svg_d = generateSvgPath(pathObj[0], pathObj[1]);
-                // 計算每一張圖的緊湊邊界
-                let bounds = getBounds(pathObj[0], pathObj[1], targets, obstacles);
-                let P = 1.0; // 預留邊緣空間
-                let vX = bounds.minX - P, vY = bounds.minY - P;
-                let vW = bounds.maxX - bounds.minX + 2 * P, vH = bounds.maxY - bounds.minY + 2 * P;
-                let viewBox = `${vX} ${vY} ${vW} ${vH}`;
-                
-                // 只繪製可見區域內的網格
-                let gridHtml = renderSvgGrid(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, P);
-                
-                let card = document.createElement('div'); card.className = 'thumb-card';
-                card.onclick = function() {
-                    openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml);
-                };
-                card.innerHTML = `
-                    <svg class="thumb-svg" viewBox="${viewBox}">
-                        ${gridHtml}
-                        <path d="${svg_d}" fill="none" stroke="#007bff" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
-                        ${featsHtml}
-                    </svg>
-                    <div class="thumb-title">Result ${idx + 1}</div>
-                `;
-                resDiv.appendChild(card);
-            });
-        } else {
-            statusText.innerText = `${result.msg} (${elapsed_ms.toFixed(1)}ms)`;
-            statusText.style.color = "#dc3545";
-            if (result.nodes) {
-                result.nodes.forEach(coordStr => {
-                    let errNode = document.querySelector(`[data-coord="${coordStr}"]`);
-                    if (errNode) errNode.classList.add('error-pulse');
-                });
-            }
-        }
-    }, 150); 
+          if (result.status === 'success') {
+              const validPaths = result.data;
+              const chosenPaths = validPaths.slice(0, limit);
+              const mainSvg = generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]);
+
+              const capMsg = result.isCapped ? " (⚠️達到多樣性上限自動收斂)" : "";
+              statusText.innerText = `✅ 極速出圖！為您展示 ${chosenPaths.length} 組路線 ${capMsg} (${elapsed_ms.toFixed(1)}ms)`;
+              statusText.style.color = "#28a745";
+              document.getElementById('svg-path').setAttribute('d', mainSvg);
+
+              const resDiv = document.getElementById('results-container');
+              resDiv.innerHTML = '';
+
+              const featsHtml = renderSvgFeatures(targets, obstacles);
+              const tStr = targets.length > 0 ? targets.map(t => `<span class="coord-tag">(${t[0]}, ${t[1]})</span>`).join('') : "無";
+              const oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : "無";
+              const infoHtml = `<div style="margin-bottom:8px;"><strong>⭐ 目標點：</strong><br>${tStr}</div><div><strong>❌ 障礙物：</strong><br>${oStr}</div>`;
+
+              chosenPaths.forEach((pathObj, idx) => {
+                  const svg_d = generateSvgPath(pathObj[0], pathObj[1]);
+                  const bounds = getBounds(pathObj[0], pathObj[1], targets, obstacles);
+                  const P = 1.0;
+                  const vX = bounds.minX - P, vY = bounds.minY - P;
+                  const vW = bounds.maxX - bounds.minX + 2 * P, vH = bounds.maxY - bounds.minY + 2 * P;
+                  const viewBox = `${vX} ${vY} ${vW} ${vH}`;
+                  const gridHtml = renderSvgGrid(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, P);
+
+                  const card = document.createElement('div'); card.className = 'thumb-card';
+                  card.onclick = function() {
+                      openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml);
+                  };
+                  card.innerHTML = `
+                      <svg class="thumb-svg" viewBox="${viewBox}">
+                          ${gridHtml}
+                          <path d="${svg_d}" fill="none" stroke="#007bff" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+                          ${featsHtml}
+                      </svg>
+                      <div class="thumb-title">Result ${idx + 1}</div>
+                  `;
+                  resDiv.appendChild(card);
+              });
+          } else {
+              statusText.innerText = `${result.msg} (${elapsed_ms.toFixed(1)}ms)`;
+              statusText.style.color = "#dc3545";
+              if (result.nodes) {
+                  result.nodes.forEach(coordStr => {
+                      const errNode = document.querySelector(`[data-coord="${coordStr}"]`);
+                      if (errNode) errNode.classList.add('error-pulse');
+                  });
+              }
+          }
+      }, 40);
   }
 
   initGrid(false);
-  autoRun(); 
+  autoRun();
 </script>
 </body>
 </html>
