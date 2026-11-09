@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="google" content="notranslate">
-<title>Twisty Turny 極速尋路引擎 (Web Worker 無限制運算版)</title>
+<title>Twisty Turny 極速尋路引擎 (曲率剪枝與千組隨機取樣版)</title>
 <style>
   :root { --cell: 40px; }
   body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
@@ -132,14 +132,13 @@
   <div class="tutorial-box">
     <strong>📖 操作教學：</strong>
     <p>調整設定：<span style="font-weight: normal;">使用滑桿修改「總步數」與「產出上限」。</span></p>
-    <p>佈置網格：<span style="font-weight: normal;">點擊網格上帶有「淡藍色圓點」的交叉點來切換狀態：</span></p>
+    <p>佈置網格：<span style="font-weight: normal;">點擊網格切換狀態：</span></p>
     <div style="padding-left: 15px; margin-bottom: 6px;">
-        👉 點 1 下：設為 ⭐ 目標（路線必經此處）<br>
-        👉 點 2 下：設為 ❌ 障礙（路線不可經過）<br>
+        👉 點 1 下：設為 ⭐ 目標（路線必經）<br>
+        👉 點 2 下：設為 ❌ 障礙（路線不可經）<br>
         👉 點 3 下：恢復空白<br>
     </div>
-    <div style="color:#888; font-size: 11.5px; margin-bottom: 8px;">（註：灰色小叉叉 ✖ 代表幾何上永遠無法抵達的死區）</div>
-    <p>出圖：<span style="font-weight: normal;">運算直到達成數量要求。</span></p>
+    <p>出圖：<span style="font-weight: normal;">採用<b>代數曲率邊界剪枝</b>與<b>千組解空間隨機抽樣</b>，在背景搜尋至多 1,000 組相異圖案並均勻取樣，避免圖形雷同！</span></p>
   </div>
 
   <div class="slider-group">
@@ -152,7 +151,7 @@
   </div>
   <button class="btn-reset" onclick="initGrid(true); autoRun();">🗑️ 清空網格</button>
   <div id="statusText" style="color: #666; font-size: 13px; font-weight: bold; text-align: center;">
-    系統就緒。背景平行運算引擎準備完畢。
+    系統就緒。
   </div>
 </div>
 
@@ -184,8 +183,7 @@
 
 <script>
   /* =========================================================================
-     1. 定義 Web Worker 背景腳本 (將運算邏輯打包，丟進背景執行)
-     完全拔除時間限制，直到找到目標數量為止。
+     1. Web Worker：包含曲率守恆剪枝與千組隨機取樣池
   ========================================================================= */
   const workerCode = `
       const TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
@@ -314,16 +312,17 @@
           visited[getIdx(0, 0)] = 1;
 
           const pathTurns = new Int8Array(totalSteps);
-          const validPaths = [];
+          const candidatePool = [];
           const seenFootprints = new Set();
-          const quotas = [
-              [Math.floor((totalSteps + 4) / 2), Math.floor((totalSteps - 4) / 2)],
-              [Math.floor((totalSteps - 4) / 2), Math.floor((totalSteps + 4) / 2)]
+          
+          // 支援兩組轉向配額（總轉角為 +4 或 -4）
+          const quotaConfigs = [
+              { L: Math.floor((totalSteps + 4) / 2), R: Math.floor((totalSteps - 4) / 2), targetSum: 4 },
+              { L: Math.floor((totalSteps - 4) / 2), R: Math.floor((totalSteps + 4) / 2), targetSum: -4 }
           ];
 
-          let isCapped = false;
-          // 完全拔除時間限制！計算將持續進行直到找到足夠的數量為止
-          const targetSearchLimit = Math.max(10, requiredCount * 2);
+          // 搜尋上限提高至 1,000 組以獲取充分取樣空間
+          const MAX_POOL_LIMIT = 1000;
 
           function estimateLowerBound(cx, cy, mask) {
               if (mask === 0) return Math.max(Math.abs(cx), Math.abs(cy));
@@ -348,18 +347,18 @@
               return false;
           }
 
-          // 核心迴圈：沒有任何 performance.now() 攔截，找到為止！
-          function dfs(step, x, y, cdir, leftRem, rightRem, unvisitedMask, startDir) {
-              if (isCapped) return;
-              if (validPaths.length >= targetSearchLimit) {
-                  isCapped = true;
-                  return;
-              }
+          function dfs(step, x, y, cdir, leftRem, rightRem, unvisitedMask, startDir, currCurvature, targetCurvature) {
+              if (candidatePool.length >= MAX_POOL_LIMIT) return;
 
-              if (totalSteps - step < estimateLowerBound(x, y, unvisitedMask)) return;
+              const remSteps = totalSteps - step;
+              // 1. 代數曲率守恆剪枝：若剩餘步數不足以彌補轉向偏角，直接剪枝
+              if (Math.abs(targetCurvature - currCurvature) > remSteps) return;
+
+              // 2. TSP 幾何曼哈頓下界剪枝
+              if (remSteps < estimateLowerBound(x, y, unvisitedMask)) return;
 
               if (step === totalSteps) {
-                  if (x === 0 && y === 0 && unvisitedMask === 0) {
+                  if (x === 0 && y === 0 && unvisitedMask === 0 && currCurvature === targetCurvature) {
                       if (totalSteps > 4) {
                           let c0 = pathTurns[0], c1 = pathTurns[1], c2 = pathTurns[2];
                           let e0 = pathTurns[totalSteps - 3], e1 = pathTurns[totalSteps - 2], e2 = pathTurns[totalSteps - 1];
@@ -389,7 +388,7 @@
 
                       if (!seenFootprints.has(fp)) {
                           seenFootprints.add(fp);
-                          validPaths.push([startDir, Array.from(pathTurns)]);
+                          candidatePool.push([startDir, Array.from(pathTurns)]);
                       }
                   }
                   return;
@@ -403,7 +402,11 @@
                   }
               }
 
-              for (let turnIdx = 0; turnIdx < 2; turnIdx++) {
+              // 隨機交替選擇分支，消除由左至右搜尋導致的圖案雷同性
+              const turnChoices = Math.random() < 0.5 ? [0, 1] : [1, 0];
+
+              for (let i = 0; i < 2; i++) {
+                  const turnIdx = turnChoices[i];
                   const turn = turnIdx === 0 ? 1 : -1;
                   const rem = turn === 1 ? leftRem : rightRem;
                   if (rem <= 0 || turn === restricted) continue;
@@ -438,7 +441,8 @@
                   dfs(step + 1, nx, ny, TRANS_NDIR[transOffset],
                       leftRem - (turn === 1 ? 1 : 0),
                       rightRem - (turn === -1 ? 1 : 0),
-                      newMask, startDir);
+                      newMask, startDir,
+                      currCurvature + turn, targetCurvature);
 
                   if (!isHomeStep) visited[nidx] = 0;
               }
@@ -453,25 +457,34 @@
           const initialMask = (1 << K) - 1;
           for (let s = 0; s < 4; s++) {
               const sDir = startDirs[s];
+              // 隨機決定先嘗試左旋或右旋配額
+              const qIdxs = Math.random() < 0.5 ? [0, 1] : [1, 0];
               for (let q = 0; q < 2; q++) {
+                  const cfg = quotaConfigs[qIdxs[q]];
                   visited.fill(0);
                   visited[getIdx(0, 0)] = 1;
-                  dfs(0, 0, 0, sDir, quotas[q][0], quotas[q][1], initialMask, sDir);
-                  if (isCapped && validPaths.length > 0) break;
+                  dfs(0, 0, 0, sDir, cfg.L, cfg.R, initialMask, sDir, 0, cfg.targetSum);
+                  // 只要候選池已達千組，提早收斂
+                  if (candidatePool.length >= MAX_POOL_LIMIT) break;
               }
-              if (isCapped && validPaths.length > 0) break;
+              if (candidatePool.length >= MAX_POOL_LIMIT) break;
           }
 
-          if (validPaths.length === 0) {
-              return { status: "error", nodes: [], msg: "❌ 無解：真的找不到符合條件的封閉迴路。真的啦...." };
+          if (candidatePool.length === 0) {
+              return { status: "error", nodes: [], msg: "❌ 無解：找不到符合條件的封閉迴路。" };
           }
 
-          for (let i = validPaths.length - 1; i > 0; i--) {
+          // 洗牌整個候選池（Fisher-Yates Shuffle）
+          for (let i = candidatePool.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
-              [validPaths[i], validPaths[j]] = [validPaths[j], validPaths[i]];
+              [candidatePool[i], candidatePool[j]] = [candidatePool[j], candidatePool[i]];
           }
 
-          return { status: "success", data: validPaths };
+          return { 
+              status: "success", 
+              data: candidatePool.slice(0, requiredCount),
+              totalSampled: candidatePool.length
+          };
       }
 
       self.onmessage = function(e) {
@@ -486,7 +499,7 @@
   const workerUrl = URL.createObjectURL(workerBlob);
 
   /* =========================================================================
-     2. 繪圖輔助函數 (保留在主執行緒)
+     2. 繪圖與幾何輔助函數
   ========================================================================= */
   const MAIN_TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
   const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
@@ -587,8 +600,7 @@
   ========================================================================= */
   let cellStates = {};
   let debounceTimer;
-  let activeWorker = null; // 追蹤目前正在運算的背景執行緒
-  const queryCache = new Map();
+  let activeWorker = null;
 
   function clearAllErrors() {
       document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
@@ -666,11 +678,10 @@
   function handleWorkerResult(result, limit, targets, obstacles) {
       const statusText = document.getElementById('statusText');
       if (result.status === 'success') {
-          const validPaths = result.data;
-          const chosenPaths = validPaths.slice(0, limit);
+          const chosenPaths = result.data;
           const mainSvg = generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]);
 
-          statusText.innerText = `✅ 出圖！為您展示 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
+          statusText.innerText = `✅ 極速出圖！已從 ${result.totalSampled} 組候選池隨機抽選 ${chosenPaths.length} 組各異路線 (${result.elapsed_ms.toFixed(1)}ms)`;
           statusText.style.color = "#28a745";
           document.getElementById('svg-path').setAttribute('d', mainSvg);
 
@@ -720,14 +731,13 @@
   function autoRun() {
       clearTimeout(debounceTimer);
       
-      // 每次啟動前，強制作業清理：把舊的背景 Worker 殺死！
       if (activeWorker) {
           activeWorker.terminate();
           activeWorker = null;
       }
 
       const statusText = document.getElementById('statusText');
-      statusText.innerHTML = "<span class='loader'></span> 深度搜尋中，請稍候... (隨時點擊網格即可中斷)";
+      statusText.innerHTML = "<span class='loader'></span> 多樣性路徑搜尋中，請稍候...";
       statusText.style.color = "#007bff";
 
       document.getElementById('svg-path').setAttribute('d', '');
@@ -744,24 +754,14 @@
               if (cellStates[k] === 2) obstacles.push([parseInt(parts[0], 10), parseInt(parts[1], 10)]);
           }
 
-          const cacheKey = `${steps}_${limit}_${JSON.stringify(targets)}_${JSON.stringify(obstacles)}`;
-          
-          if (queryCache.has(cacheKey)) {
-              handleWorkerResult(queryCache.get(cacheKey), limit, targets, obstacles);
-          } else {
-              // 建立全新的背景 Worker 來接手無限期的搜尋任務
-              activeWorker = new Worker(workerUrl);
-              activeWorker.onmessage = function(e) {
-                  const result = e.data;
-                  if (result.status === 'success') {
-                      if (queryCache.size > 20) queryCache.delete(queryCache.keys().next().value);
-                      queryCache.set(cacheKey, result);
-                  }
-                  handleWorkerResult(result, limit, targets, obstacles);
-                  activeWorker = null; // 跑完就釋放
-              };
-              activeWorker.postMessage({ steps, targets, obstacles, limit });
-          }
+          // 不採用快取以確保每次觸發皆能隨機重抽相異路徑
+          activeWorker = new Worker(workerUrl);
+          activeWorker.onmessage = function(e) {
+              const result = e.data;
+              handleWorkerResult(result, limit, targets, obstacles);
+              activeWorker = null;
+          };
+          activeWorker.postMessage({ steps, targets, obstacles, limit });
       }, 50);
   }
 
