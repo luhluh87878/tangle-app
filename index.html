@@ -3,111 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Twisty Turny: 幾何扭扭樂引擎</title>
+    <title>Twisty Turny: Generative Fit</title>
     <style>
         :root {
             --primary-blue: #0d6efd;
             --primary-red: #dc3545;
-            --bg-dark: #343a40;
+            --bg-dark: #212529;
             --bg-gray: #f8f9fa;
             --border-color: #dee2e6;
-            --grid-color: #e9ecef;
+            --grid-line: #e9ecef;
             --text-dark: #212529;
-            --text-muted: #6c757d;
         }
 
         body, html {
             margin: 0; padding: 0; height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #e9ecef;
             display: flex; flex-direction: column;
             overflow: hidden;
         }
 
-        /* 頂部導覽列 (分頁切換) */
+        /* 頂部導覽列 */
         .navbar {
             background-color: var(--bg-dark); padding: 10px 20px;
             display: flex; justify-content: space-between; align-items: center; color: white;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 100;
         }
-        .navbar-title { font-size: 1.2rem; font-weight: bold; }
-        .nav-tabs { display: flex; gap: 10px; }
+        .navbar-title { font-size: 1.1rem; font-weight: bold; }
+        .nav-tabs { display: flex; gap: 8px; }
         .nav-tab {
-            padding: 8px 16px; border-radius: 6px; cursor: pointer;
-            background-color: transparent; border: 1px solid transparent; color: #adb5bd;
-            font-weight: bold; transition: all 0.2s;
+            padding: 6px 14px; border-radius: 6px; cursor: pointer;
+            background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #adb5bd;
+            font-weight: bold; font-size: 0.9rem; transition: all 0.2s;
         }
-        .nav-tab.active { background-color: var(--primary-blue); color: white; }
-        .nav-tab:hover:not(.active) { color: white; background-color: rgba(255,255,255,0.1); }
+        .nav-tab.active { background-color: var(--primary-blue); color: white; border-color: var(--primary-blue); }
 
-        /* 工具列容器 */
-        .toolbar-container {
-            background: white; margin: 15px; border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 10;
-        }
-        
-        /* 各模式專屬工具列 (預設隱藏) */
-        .toolbar { display: none; padding: 15px 20px; flex-direction: column; gap: 12px; }
+        /* 工具列 */
+        .toolbar-container { background: white; margin: 10px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .toolbar { display: none; padding: 12px 20px; flex-direction: column; gap: 10px; }
         .toolbar.active { display: flex; }
 
-        .control-row { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
-        .control-label { font-weight: bold; color: var(--text-dark); min-width: 80px; }
-        .instruction-text { color: var(--text-muted); font-size: 0.9rem; background: var(--bg-gray); padding: 6px 12px; border-radius: 4px; }
+        .control-row { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; font-size: 0.9rem; }
+        .instruction-text { color: #6c757d; background: var(--bg-gray); padding: 5px 10px; border-radius: 4px; width: 100%; }
         
-        input[type="range"] { flex: 1; min-width: 200px; }
+        input[type="range"] { flex: 1; min-width: 180px; }
         .val-display { font-weight: bold; color: var(--primary-blue); min-width: 30px; text-align: right; }
         
-        .btn-group { display: flex; gap: 10px; width: 100%; margin-top: 5px; }
+        .btn-group { display: flex; gap: 10px; width: 100%; margin-top: 4px; }
         button {
-            padding: 10px 20px; border: none; border-radius: 6px; font-size: 1rem;
-            font-weight: bold; cursor: pointer; transition: opacity 0.2s; flex: 1;
+            padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.95rem;
+            font-weight: bold; cursor: pointer; flex: 1;
         }
-        button:hover { opacity: 0.9; }
         .btn-primary { background-color: var(--primary-blue); color: white; }
         .btn-danger { background-color: var(--primary-red); color: white; }
         .btn-secondary { background-color: #e2e6ea; color: var(--text-dark); }
 
-        /* 狀態提示列 */
-        #statusBar {
-            padding: 8px; text-align: center; font-size: 0.9rem; font-weight: bold;
-            display: none; border-bottom: 1px solid transparent;
-        }
-        .status-success { background-color: #d1e7dd; color: #0f5132; border-color: #badbcc; }
-        .status-error { background-color: #f8d7da; color: #842029; border-color: #f5c6cb; }
+        /* 狀態提示 */
+        #statusBar { padding: 6px; text-align: center; font-size: 0.85rem; font-weight: bold; display: none; }
+        .status-success { background-color: #d1e7dd; color: #0f5132; }
+        .status-error { background-color: #f8d7da; color: #842029; }
 
-        /* 主畫布與結果區 */
+        /* 工作區 */
         .workspace {
             display: flex; flex-direction: column; flex: 1;
-            margin: 0 15px 15px 15px; background: white;
-            border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;
+            margin: 0 10px 10px 10px; background: white;
+            border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); overflow: hidden; position: relative;
         }
 
-        .canvas-wrapper {
-            flex: 1; position: relative; overflow: hidden; cursor: crosshair;
-            background-image: 
-                linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
-                linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-            background-size: 30px 30px;
-        }
-        canvas { position: absolute; top: 0; left: 0; }
+        .canvas-wrapper { flex: 1; position: relative; overflow: hidden; cursor: crosshair; }
+        canvas { display: block; width: 100%; height: 100%; }
 
-        /* 沙盒模式 - 底部縮圖列 */
+        /* 沙盒模式底部縮圖列 */
         .gallery-container {
-            display: none; height: 120px; background: var(--bg-gray);
-            border-top: 1px solid var(--border-color); padding: 10px;
-            overflow-x: auto; gap: 10px;
+            display: none; height: 110px; background: var(--bg-gray);
+            border-top: 1px solid var(--border-color); padding: 8px;
+            overflow-x: auto; gap: 8px; align-items: center;
         }
         .gallery-container.active { display: flex; }
         .thumbnail {
-            width: 100px; height: 100px; background: white; border: 2px solid var(--border-color);
-            border-radius: 6px; cursor: pointer; flex-shrink: 0; transition: border-color 0.2s;
+            width: 90px; height: 90px; background: white; border: 2px solid var(--border-color);
+            border-radius: 6px; cursor: pointer; flex-shrink: 0;
         }
-        .thumbnail:hover, .thumbnail.selected { border-color: var(--primary-blue); }
+        .thumbnail.selected { border-color: var(--primary-blue); box-shadow: 0 0 5px rgba(13,110,253,0.3); }
     </style>
 </head>
 <body>
 
-    <!-- 頂部切換 -->
     <div class="navbar">
         <div class="navbar-title">Twisty Turny: Generative Fit</div>
         <div class="nav-tabs">
@@ -116,21 +97,18 @@
         </div>
     </div>
 
-    <!-- 動態工具列 -->
     <div class="toolbar-container">
-        <!-- 1. 沙盒模式工具列 -->
+        <!-- 沙盒模式工具列 -->
         <div id="toolbar-sandbox" class="toolbar active">
             <div class="control-row">
                 <div class="instruction-text">🎯 沙盒模式：點擊網格放置 目標(⭐) 與 障礙(❌)。(左鍵目標，右鍵障礙)</div>
             </div>
             <div class="control-row">
-                <span class="control-label">👣 限制步數</span>
+                <span>👣 限制步數</span>
                 <input type="range" id="sb-steps" min="10" max="100" step="2" value="40">
                 <span class="val-display" id="sb-steps-val">40</span>
-            </div>
-            <div class="control-row">
-                <span class="control-label">🖼️ 產出上限</span>
-                <input type="range" id="sb-limit" min="1" max="50" value="16">
+                <span>🖼️ 產出上限</span>
+                <input type="range" id="sb-limit" min="1" max="30" value="16">
                 <span class="val-display" id="sb-limit-val">16</span>
             </div>
             <div class="btn-group">
@@ -139,53 +117,43 @@
             </div>
         </div>
 
-        <!-- 2. 塗鴉擬合工具列 -->
+        <!-- 塗鴉擬合工具列 -->
         <div id="toolbar-generative" class="toolbar">
             <div class="control-row">
-                <span class="control-label">畫布設定</span>
+                <span>畫布設定</span>
                 <label><input type="radio" name="gen-canvas-mode" value="auto"> 預設 (自動判斷)</label>
                 <label><input type="radio" name="gen-canvas-mode" value="open" checked> 強制開放</label>
-            </div>
-            <div class="control-row">
-                <span class="control-label">節數模式</span>
+                <span>節數模式</span>
                 <select id="gen-step-mode">
-                    <option value="box">✨ 自動適應 (Box-Counting)</option>
+                    <option value="box">✨ 自動適應</option>
                     <option value="fixed" selected>強制步數</option>
                 </select>
             </div>
             <div class="control-row">
-                <span class="control-label">強制步數</span>
+                <span>強制步數</span>
                 <input type="range" id="gen-steps" min="10" max="200" value="62">
                 <span class="val-display" id="gen-steps-val">62</span>
             </div>
             <div class="btn-group">
                 <button class="btn-primary" id="gen-generateBtn">🚀 生成網格迴路</button>
-                <button class="btn-secondary" id="gen-clearBtn">❌ 清除</button>
+                <button class="btn-secondary" id="gen-clearBtn">❌ 清除重畫</button>
             </div>
         </div>
     </div>
 
-    <!-- 狀態提示 -->
     <div id="statusBar"></div>
 
-    <!-- 工作區 -->
     <div class="workspace">
         <div class="canvas-wrapper" id="canvasContainer">
             <canvas id="mainCanvas"></canvas>
         </div>
-        <!-- 沙盒專用結果列 -->
         <div class="gallery-container" id="galleryContainer"></div>
     </div>
 
 <script>
-/**
- * 核心狀態管理與 UI 控制
- */
 const UI = {
-    mode: 'sandbox', // 'sandbox' 或 'generative'
+    mode: 'sandbox',
     gridSize: 30,
-    
-    // DOM Elements
     canvas: document.getElementById('mainCanvas'),
     ctx: document.getElementById('mainCanvas').getContext('2d'),
     container: document.getElementById('canvasContainer'),
@@ -196,12 +164,10 @@ const UI = {
         this.resize();
         window.addEventListener('resize', () => this.resize());
         
-        // 模式切換綁定
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', (e) => this.switchMode(e.target.dataset.mode));
         });
 
-        // 綁定滑桿顯示
         const bindSlider = (id) => {
             document.getElementById(id).addEventListener('input', (e) => {
                 document.getElementById(`${id}-val`).textContent = e.target.value;
@@ -209,9 +175,7 @@ const UI = {
         };
         bindSlider('sb-steps'); bindSlider('sb-limit'); bindSlider('gen-steps');
 
-        // 禁止右鍵選單 (為了沙盒模式放障礙物)
         this.canvas.addEventListener('contextmenu', e => e.preventDefault());
-
         this.switchMode('sandbox');
     },
 
@@ -223,19 +187,13 @@ const UI = {
 
     switchMode(newMode) {
         this.mode = newMode;
-        
-        // 更新 Tab 樣式
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         document.querySelector(`.nav-tab[data-mode="${newMode}"]`).classList.add('active');
 
-        // 切換工具列
         document.getElementById('toolbar-sandbox').classList.toggle('active', newMode === 'sandbox');
         document.getElementById('toolbar-generative').classList.toggle('active', newMode === 'generative');
-        
-        // 切換畫廊顯示
         this.gallery.classList.toggle('active', newMode === 'sandbox');
 
-        // 重置狀態
         this.hideStatus();
         SandboxController.reset();
         GenerativeController.reset();
@@ -247,145 +205,151 @@ const UI = {
         this.statusBar.className = isSuccess ? 'status-success' : 'status-error';
         this.statusBar.style.display = 'block';
     },
-
-    hideStatus() {
-        this.statusBar.style.display = 'none';
-    },
+    hideStatus() { this.statusBar.style.display = 'none'; },
 
     render() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // 繪製座標系中心點參考
-        const cx = Math.floor(this.canvas.width / 2 / this.gridSize) * this.gridSize;
-        const cy = Math.floor(this.canvas.height / 2 / this.gridSize) * this.gridSize;
+        // 繪製背景格線與十字星
+        this.drawGridBackground();
 
         if (this.mode === 'sandbox') {
-            SandboxController.draw(this.ctx, this.gridSize, cx, cy);
+            SandboxController.draw(this.ctx, this.gridSize);
         } else {
-            GenerativeController.draw(this.ctx, this.gridSize, cx, cy);
+            GenerativeController.draw(this.ctx, this.gridSize);
+        }
+    },
+
+    drawGridBackground() {
+        const ctx = this.ctx;
+        const w = this.canvas.width, h = this.canvas.height;
+        const gs = this.gridSize;
+
+        ctx.strokeStyle = '#e9ecef';
+        ctx.lineWidth = 1;
+        ctx.fillStyle = '#ced4da';
+        ctx.font = '9px sans-serif';
+
+        for (let x = 0; x < w; x += gs) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+        for (let y = 0; y < h; y += gs) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        // 十字交點與坐標
+        const cx = Math.floor(w / 2 / gs) * gs;
+        const cy = Math.floor(h / 2 / gs) * gs;
+
+        for (let x = gs / 2; x < w; x += gs) {
+            for (let y = gs / 2; y < h; y += gs) {
+                ctx.fillStyle = '#adb5bd';
+                ctx.fillRect(x - 1, y - 1, 2, 2);
+            }
         }
     }
 };
 
 /**
- * [模式 1] 沙盒模式控制器 (Sandbox Mode)
- * 功能：放置目標、障礙，產出多組路徑
+ * 沙盒模式
  */
 const SandboxController = {
     targets: [],
     obstacles: [],
     results: [],
-    currentPathIndex: -1,
+    currentIdx: -1,
 
     reset() {
         this.targets = [];
         this.obstacles = [];
         this.results = [];
-        this.currentPathIndex = -1;
+        this.currentIdx = -1;
         UI.gallery.innerHTML = '';
     },
 
     handleClick(e) {
         const rect = UI.canvas.getBoundingClientRect();
-        // 換算成相對於畫面中心的網格座標
-        const cx = Math.floor(UI.canvas.width / 2 / UI.gridSize);
-        const cy = Math.floor(UI.canvas.height / 2 / UI.gridSize);
-        
-        const gx = Math.floor((e.clientX - rect.left) / UI.gridSize) - cx;
-        const gy = Math.floor((e.clientY - rect.top) / UI.gridSize) - cy;
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const gs = UI.gridSize;
 
-        if (e.button === 0) { // 左鍵: 目標
+        // 計算網格中心點座標
+        const gx = Math.round((px - gs/2) / gs);
+        const gy = Math.round((py - gs/2) / gs);
+
+        if (e.button === 0) {
             this.togglePoint(this.targets, this.obstacles, gx, gy);
-        } else if (e.button === 2) { // 右鍵: 障礙
+        } else if (e.button === 2) {
             this.togglePoint(this.obstacles, this.targets, gx, gy);
         }
         UI.render();
     },
 
-    togglePoint(primaryList, secondaryList, x, y) {
-        // 如果另一列表有該點，先移除
-        const secIdx = secondaryList.findIndex(p => p.x === x && p.y === y);
-        if (secIdx !== -1) secondaryList.splice(secIdx, 1);
-
-        const priIdx = primaryList.findIndex(p => p.x === x && p.y === y);
-        if (priIdx !== -1) primaryList.splice(priIdx, 1);
-        else primaryList.push({x, y});
+    togglePoint(primary, secondary, x, y) {
+        const sIdx = secondary.findIndex(p => p.x === x && p.y === y);
+        if (sIdx !== -1) secondary.splice(sIdx, 1);
+        const pIdx = primary.findIndex(p => p.x === x && p.y === y);
+        if (pIdx !== -1) primary.splice(pIdx, 1);
+        else primary.push({x, y});
     },
 
     generate() {
-        const targetSteps = parseInt(document.getElementById('sb-steps').value, 10);
+        const steps = parseInt(document.getElementById('sb-steps').value, 10);
         const limit = parseInt(document.getElementById('sb-limit').value, 10);
         
         const t0 = performance.now();
-        
-        // 簡易的 DFS 尋路 (為確保這份 code 直接可用，提供一個基礎的多解搜尋器)
-        this.results = this.runSandboxDFS(targetSteps, limit);
-        
+        this.results = this.runDFS(steps, limit);
         const dt = (performance.now() - t0).toFixed(1);
+
         if (this.results.length > 0) {
-            UI.showStatus(`✅ 擬合出圖！已從 1000 隨機抽取 ${this.results.length} 組結果 (${dt}ms)`, true);
+            UI.showStatus(`✅ 擬合出圖！已從隨機抽取 ${this.results.length} 組結果 (${dt}ms)`, true);
             this.buildGallery();
         } else {
-            UI.showStatus(`❌ 無法在 ${targetSteps} 步內避開障礙並走完全部目標，請調整設定。`, false);
+            UI.showStatus(`❌ 無法在 ${steps} 步內生成符合條件的路徑，請調整目標或步數。`, false);
         }
     },
 
-    runSandboxDFS(steps, limit) {
-        // 這是一個簡化的備用 DFS，支援多解尋路。
-        // 你可以把這裡替換回你原本寫得很厲害的沙盒演算法！
-        let validPaths = [];
+    runDFS(steps, limit) {
+        let paths = [];
         let visited = new Set(['0,0']);
-        const directions = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
-        
+        const dirs = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
         const obsSet = new Set(this.obstacles.map(o => `${o.x},${o.y}`));
-        
-        const dfs = (x, y, currentStep, path, lastDir) => {
-            if (validPaths.length >= limit) return;
-            if (currentStep === steps) {
-                // 檢查是否踩滿所有 target
-                let hitAll = true;
-                for (let t of this.targets) {
-                    if (!path.some(p => p.x === t.x && p.y === t.y)) { hitAll = false; break; }
-                }
-                if (hitAll) validPaths.push([...path]);
+
+        const dfs = (x, y, step, path, lastDir) => {
+            if (paths.length >= limit) return;
+            if (step === steps) {
+                let hitAll = this.targets.every(t => path.some(p => p.x === t.x && p.y === t.y));
+                if (hitAll) paths.push([...path]);
                 return;
             }
-
-            // 稍微打亂方向以求得不同解
-            let dirs = [...directions].sort(() => Math.random() - 0.5);
-            for (let i = 0; i < 4; i++) {
-                let dirIdx = directions.indexOf(dirs[i]);
+            let shuffled = [...dirs].sort(() => Math.random() - 0.5);
+            for (let d of shuffled) {
+                let dirIdx = dirs.indexOf(d);
                 if (lastDir !== -1 && (dirIdx === lastDir || dirIdx === (lastDir ^ 2))) continue;
-                
-                let nx = x + dirs[i].dx, ny = y + dirs[i].dy;
-                let key = `${nx},${ny}`;
-                
-                if (!visited.has(key) && !obsSet.has(key)) {
-                    visited.add(key); path.push({x: nx, y: ny});
-                    dfs(nx, ny, currentStep + 1, path, dirIdx);
-                    path.pop(); visited.delete(key);
+                let nx = x + d.dx, ny = y + d.dy, k = `${nx},${ny}`;
+                if (!visited.has(k) && !obsSet.has(k)) {
+                    visited.add(k); path.push({x: nx, y: ny});
+                    dfs(nx, ny, step + 1, path, dirIdx);
+                    path.pop(); visited.delete(k);
                 }
             }
         };
-        
         dfs(0, 0, 0, [{x:0, y:0}], -1);
-        return validPaths;
+        return paths;
     },
 
     buildGallery() {
         UI.gallery.innerHTML = '';
-        this.currentPathIndex = 0;
+        this.currentIdx = 0;
         this.results.forEach((path, idx) => {
             const canvas = document.createElement('canvas');
             canvas.className = `thumbnail ${idx === 0 ? 'selected' : ''}`;
-            canvas.width = 100; canvas.height = 100;
+            canvas.width = 90; canvas.height = 90;
             const ctx = canvas.getContext('2d');
             
-            // 縮圖繪製
-            ctx.beginPath();
-            ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 2;
+            ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 2; ctx.beginPath();
             path.forEach((p, i) => {
-                let px = 50 + p.x * 5, py = 50 + p.y * 5; // 微縮放
+                let px = 45 + p.x * 6, py = 45 + p.y * 6;
                 if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             });
             ctx.stroke();
@@ -393,7 +357,7 @@ const SandboxController = {
             canvas.addEventListener('click', () => {
                 document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('selected'));
                 canvas.classList.add('selected');
-                this.currentPathIndex = idx;
+                this.currentIdx = idx;
                 UI.render();
             });
             UI.gallery.appendChild(canvas);
@@ -401,97 +365,32 @@ const SandboxController = {
         UI.render();
     },
 
-    draw(ctx, gridSize, cx, cy) {
-        // 畫網格系
-        ctx.fillStyle = '#adb5bd'; ctx.font = '10px Arial';
-        for(let i = -10; i <= 10; i+=2) {
-            ctx.fillText(i, cx + i * gridSize + 2, cy + 12);
-        }
+    draw(ctx, gs) {
+        const offX = gs / 2, offY = gs / 2;
 
-        // 畫路徑
-        if (this.currentPathIndex >= 0 && this.results[this.currentPathIndex]) {
-            const path = this.results[this.currentPathIndex];
-            ctx.beginPath(); ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 4;
+        if (this.currentIdx >= 0 && this.results[this.currentIdx]) {
+            const path = this.results[this.currentIdx];
+            ctx.beginPath(); ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 3; ctx.lineJoin = 'miter';
             path.forEach((p, i) => {
-                if (i===0) ctx.moveTo(cx + p.x*gridSize, cy + p.y*gridSize);
-                else ctx.lineTo(cx + p.x*gridSize, cy + p.y*gridSize);
+                let x = p.x * gs + offX, y = p.y * gs + offY;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             });
             ctx.stroke();
         }
 
-        // 畫標記
-        ctx.font = '20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        this.targets.forEach(p => ctx.fillText('⭐', cx + p.x * gridSize, cy + p.y * gridSize));
-        this.obstacles.forEach(p => ctx.fillText('❌', cx + p.x * gridSize, cy + p.y * gridSize));
+        ctx.font = '16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        this.targets.forEach(p => ctx.fillText('⭐', p.x * gs + offX, p.y * gs + offY));
+        this.obstacles.forEach(p => ctx.fillText('❌', p.x * gs + offX, p.y * gs + offY));
     }
 };
 
 /**
- * [模式 2] 塗鴉擬合控制器 (Generative Fit Mode)
- * 功能：手繪線條，運用 TwistyTurnyEngine 進行輪廓擬合
+ * 塗鴉擬合模式
  */
 const GenerativeController = {
     isDrawing: false,
     rawStroke: [],
     finalPath: null,
-    
-    // 注入我們先前完善的演算法核心
-    engine: {
-        getChebyshevDist: (p1, p2) => Math.max(Math.abs(p1.x - p2.x), Math.abs(p1.y - p2.y)),
-        resample: function(raw, steps) {
-            let len = 0;
-            for(let i=1; i<raw.length; i++) len += this.getChebyshevDist(raw[i-1], raw[i]);
-            let scale = len === 0 ? 1 : steps / len;
-            let scaled = raw.map(p => ({x: p.x*scale, y: p.y*scale}));
-            let skel = [ {x: Math.round(scaled[0].x), y: Math.round(scaled[0].y)} ];
-            let cur = scaled[0];
-            for(let i=1; i<scaled.length; i++) {
-                let next = scaled[i], d = this.getChebyshevDist(cur, next);
-                while(d >= 1.0) {
-                    let r = 1.0/d;
-                    cur = {x: cur.x + (next.x-cur.x)*r, y: cur.y + (next.y-cur.y)*r};
-                    skel.push({x: Math.round(cur.x), y: Math.round(cur.y)});
-                    d = this.getChebyshevDist(cur, next);
-                }
-            }
-            skel.push({x: Math.round(scaled[scaled.length-1].x), y: Math.round(scaled[scaled.length-1].y)});
-            return skel;
-        },
-        solve: function(raw, steps) {
-            const skel = this.resample(raw, steps);
-            if(skel.length < 2) return null;
-            const start = skel[0], end = skel[skel.length-1];
-            let best = null, vis = new Set([`${start.x},${start.y}`]);
-            const dirs = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
-            
-            const dfs = (x, y, step, path, lastDir, iter) => {
-                if(best || iter.count++ > 50000) return;
-                if(step === steps) {
-                    if(this.getChebyshevDist({x,y}, end) <= 3) best = [...path];
-                    return;
-                }
-                
-                let sStart = Math.max(0, step - 8), sEnd = Math.min(skel.length-1, step + 8);
-                let minDist = Infinity;
-                for(let i = sStart; i <= sEnd; i++) minDist = Math.min(minDist, this.getChebyshevDist({x,y}, skel[i]));
-                if(minDist > 3) return; // 彈性牽繩容差
-
-                if(steps - step > 3 && this.getChebyshevDist({x,y}, end) <= 1) return; // 隔離區
-
-                for(let i=0; i<4; i++) {
-                    if(lastDir !== -1 && (i === (lastDir+1)%4 || i === (lastDir+3)%4) === false) continue;
-                    let nx = x+dirs[i].dx, ny = y+dirs[i].dy, k = `${nx},${ny}`;
-                    if(!vis.has(k)) {
-                        vis.add(k); path.push({x:nx, y:ny});
-                        dfs(nx, ny, step+1, path, i, iter);
-                        path.pop(); vis.delete(k);
-                    }
-                }
-            };
-            dfs(start.x, start.y, 0, [start], -1, {count:0});
-            return best;
-        }
-    },
 
     reset() {
         this.rawStroke = [];
@@ -499,66 +398,115 @@ const GenerativeController = {
     },
 
     handleDown(e) {
-        if (this.finalPath) return; // 已有圖形禁止畫
+        if (this.finalPath) return;
         this.isDrawing = true;
         this.rawStroke = [];
         this.addPoint(e);
     },
-    
     handleMove(e) { if (this.isDrawing) this.addPoint(e); },
-    handleUp(e) { this.isDrawing = false; },
+    handleUp() { this.isDrawing = false; },
 
     addPoint(e) {
         const rect = UI.canvas.getBoundingClientRect();
-        // 絕對網格座標，供重取樣引擎使用
-        this.rawStroke.push({ 
-            x: (e.clientX - rect.left) / UI.gridSize, 
-            y: (e.clientY - rect.top) / UI.gridSize 
+        this.rawStroke.push({
+            x: (e.clientX - rect.left) / UI.gridSize,
+            y: (e.clientY - rect.top) / UI.gridSize
         });
         UI.render();
     },
 
     generate() {
         if (this.rawStroke.length < 5) return;
-        const targetSteps = parseInt(document.getElementById('gen-steps').value, 10);
+        const steps = parseInt(document.getElementById('gen-steps').value, 10);
         
         const t0 = performance.now();
-        this.finalPath = this.engine.solve(this.rawStroke, targetSteps);
+        this.finalPath = this.solveOpenPath(this.rawStroke, steps);
         const dt = (performance.now() - t0).toFixed(1);
 
         if (this.finalPath) {
-            UI.showStatus(`✅ 擬合出圖！完美貼合筆跡，共 ${targetSteps} 步 (${dt}ms)`, true);
+            UI.showStatus(`✅ 擬合出圖！成功貼合筆跡，共 ${steps} 步 (${dt}ms)`, true);
         } else {
-            UI.showStatus(`❌ 無法完全貼合筆跡閉合，試著畫圓滑一點或調整步數！(${dt}ms)`, false);
+            UI.showStatus(`❌ 無法完全貼合筆跡，請嘗試畫得更流暢或調整步數 (${dt}ms)`, false);
         }
         UI.render();
     },
 
-    draw(ctx, gridSize, cx, cy) { // cx, cy 對此模式不重要，因為座標是絕對的
-        // 畫手繪軌跡 (灰色)
+    solveOpenPath(raw, steps) {
+        // 切比雪夫重取樣與彈性牽繩引擎
+        const dist = (p1, p2) => Math.max(Math.abs(p1.x - p2.x), Math.abs(p1.y - p2.y));
+        let len = 0;
+        for (let i = 1; i < raw.length; i++) len += dist(raw[i-1], raw[i]);
+        let scale = len === 0 ? 1 : steps / len;
+        let scaled = raw.map(p => ({ x: p.x * scale, y: p.y * scale }));
+        
+        let skel = [{ x: Math.round(scaled[0].x), y: Math.round(scaled[0].y) }];
+        let cur = scaled[0];
+        for (let i = 1; i < scaled.length; i++) {
+            let next = scaled[i], d = dist(cur, next);
+            while (d >= 1.0) {
+                let r = 1.0 / d;
+                cur = { x: cur.x + (next.x - cur.x)*r, y: cur.y + (next.y - cur.y)*r };
+                skel.push({ x: Math.round(cur.x), y: Math.round(cur.y) });
+                d = dist(cur, next);
+            }
+        }
+        skel.push({ x: Math.round(scaled[scaled.length-1].x), y: Math.round(scaled[scaled.length-1].y) });
+
+        const start = skel[0], end = skel[skel.length-1];
+        let best = null, vis = new Set([`${start.x},${start.y}`]);
+        const dirs = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
+
+        const dfs = (x, y, step, path, lastDir, iter) => {
+            if (best || iter.count++ > 60000) return;
+            if (step === steps) {
+                if (dist({x,y}, end) <= 3) best = [...path];
+                return;
+            }
+            let sStart = Math.max(0, step - 8), sEnd = Math.min(skel.length-1, step + 8);
+            let minDist = Infinity;
+            for (let i = sStart; i <= sEnd; i++) minDist = Math.min(minDist, dist({x,y}, skel[i]));
+            if (minDist > 3) return;
+
+            if (steps - step > 3 && dist({x,y}, end) <= 1) return;
+
+            for (let i = 0; i < 4; i++) {
+                if (lastDir !== -1 && (i === (lastDir+1)%4 || i === (lastDir+3)%4) === false) continue;
+                let nx = x + dirs[i].dx, ny = y + dirs[i].dy, k = `${nx},${ny}`;
+                if (!vis.has(k)) {
+                    vis.add(k); path.push({x:nx, y:ny});
+                    dfs(nx, ny, step+1, path, i, iter);
+                    path.pop(); vis.delete(k);
+                }
+            }
+        };
+        dfs(start.x, start.y, 0, [start], -1, {count:0});
+        return best;
+    },
+
+    draw(ctx, gs) {
+        const offX = gs / 2, offY = gs / 2;
+
         if (this.rawStroke.length > 0 && !this.finalPath) {
             ctx.beginPath(); ctx.strokeStyle = '#adb5bd'; ctx.lineWidth = 3; ctx.lineCap = 'round';
             this.rawStroke.forEach((p, i) => {
-                let px = p.x * gridSize, py = p.y * gridSize;
-                if (i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                let px = p.x * gs, py = p.y * gs;
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             });
             ctx.stroke();
         }
 
-        // 畫擬合結果 (藍色)
         if (this.finalPath) {
             ctx.beginPath(); ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 4; ctx.lineJoin = 'miter';
             this.finalPath.forEach((p, i) => {
-                // 因為是絕對網格座標，需轉回像素
-                let px = p.x * gridSize + (gridSize/2), py = p.y * gridSize + (gridSize/2);
-                if (i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                let px = p.x * gs + offX, py = p.y * gs + offY;
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             });
             ctx.stroke();
         }
     }
 };
 
-// --- 事件代理綁定 ---
+// 綁定畫布互動
 UI.canvas.addEventListener('mousedown', e => {
     if (UI.mode === 'sandbox') SandboxController.handleClick(e);
     else GenerativeController.handleDown(e);
@@ -566,18 +514,17 @@ UI.canvas.addEventListener('mousedown', e => {
 UI.canvas.addEventListener('mousemove', e => {
     if (UI.mode === 'generative') GenerativeController.handleMove(e);
 });
-UI.canvas.addEventListener('mouseup', e => {
-    if (UI.mode === 'generative') GenerativeController.handleUp(e);
+UI.canvas.addEventListener('mouseup', () => {
+    if (UI.mode === 'generative') GenerativeController.handleUp();
 });
 
-// 按鈕事件
+// 按鈕綁定
 document.getElementById('sb-generateBtn').addEventListener('click', () => SandboxController.generate());
 document.getElementById('sb-clearBtn').addEventListener('click', () => { SandboxController.reset(); UI.hideStatus(); UI.render(); });
 
 document.getElementById('gen-generateBtn').addEventListener('click', () => GenerativeController.generate());
 document.getElementById('gen-clearBtn').addEventListener('click', () => { GenerativeController.reset(); UI.hideStatus(); UI.render(); });
 
-// 啟動
 UI.init();
 </script>
 </body>
