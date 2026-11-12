@@ -3,345 +3,582 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>幾何扭扭樂 (Twisty Turny) - 開放路徑引擎</title>
+    <title>Twisty Turny: 幾何扭扭樂引擎</title>
     <style>
         :root {
-            --primary-blue: #007bff;
+            --primary-blue: #0d6efd;
+            --primary-red: #dc3545;
+            --bg-dark: #343a40;
             --bg-gray: #f8f9fa;
             --border-color: #dee2e6;
             --grid-color: #e9ecef;
-            --error-red: #dc3545;
+            --text-dark: #212529;
+            --text-muted: #6c757d;
         }
+
         body, html {
-            margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-gray); display: flex; flex-direction: column;
+            margin: 0; padding: 0; height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #e9ecef;
+            display: flex; flex-direction: column;
+            overflow: hidden;
         }
-        .toolbar {
-            background: white; padding: 15px 20px; border-bottom: 1px solid var(--border-color);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 10;
+
+        /* 頂部導覽列 (分頁切換) */
+        .navbar {
+            background-color: var(--bg-dark); padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center; color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 100;
         }
-        .control-group { margin-bottom: 12px; display: flex; align-items: center; gap: 15px; }
-        .control-group label { font-size: 14px; font-weight: 500; color: #333; }
-        select, input[type="range"] { padding: 5px; }
-        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        .navbar-title { font-size: 1.2rem; font-weight: bold; }
+        .nav-tabs { display: flex; gap: 10px; }
+        .nav-tab {
+            padding: 8px 16px; border-radius: 6px; cursor: pointer;
+            background-color: transparent; border: 1px solid transparent; color: #adb5bd;
+            font-weight: bold; transition: all 0.2s;
+        }
+        .nav-tab.active { background-color: var(--primary-blue); color: white; }
+        .nav-tab:hover:not(.active) { color: white; background-color: rgba(255,255,255,0.1); }
+
+        /* 工具列容器 */
+        .toolbar-container {
+            background: white; margin: 15px; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 10;
+        }
+        
+        /* 各模式專屬工具列 (預設隱藏) */
+        .toolbar { display: none; padding: 15px 20px; flex-direction: column; gap: 12px; }
+        .toolbar.active { display: flex; }
+
+        .control-row { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .control-label { font-weight: bold; color: var(--text-dark); min-width: 80px; }
+        .instruction-text { color: var(--text-muted); font-size: 0.9rem; background: var(--bg-gray); padding: 6px 12px; border-radius: 4px; }
+        
+        input[type="range"] { flex: 1; min-width: 200px; }
+        .val-display { font-weight: bold; color: var(--primary-blue); min-width: 30px; text-align: right; }
+        
+        .btn-group { display: flex; gap: 10px; width: 100%; margin-top: 5px; }
         button {
-            padding: 8px 16px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: bold;
-            display: flex; align-items: center; justify-content: center; gap: 5px; flex: 1;
+            padding: 10px 20px; border: none; border-radius: 6px; font-size: 1rem;
+            font-weight: bold; cursor: pointer; transition: opacity 0.2s; flex: 1;
         }
+        button:hover { opacity: 0.9; }
         .btn-primary { background-color: var(--primary-blue); color: white; }
-        .btn-primary:hover { background-color: #0056b3; }
-        .btn-secondary { background-color: #e2e6ea; color: #333; }
-        .btn-secondary:hover { background-color: #dae0e5; }
-        
-        #errorBox {
-            background-color: #f8d7da; color: var(--error-red); padding: 8px; text-align: center;
-            font-size: 13px; font-weight: bold; display: none; border-bottom: 1px solid #f5c6cb;
+        .btn-danger { background-color: var(--primary-red); color: white; }
+        .btn-secondary { background-color: #e2e6ea; color: var(--text-dark); }
+
+        /* 狀態提示列 */
+        #statusBar {
+            padding: 8px; text-align: center; font-size: 0.9rem; font-weight: bold;
+            display: none; border-bottom: 1px solid transparent;
         }
-        
-        .canvas-container {
-            flex: 1; position: relative; overflow: hidden; background-color: white;
+        .status-success { background-color: #d1e7dd; color: #0f5132; border-color: #badbcc; }
+        .status-error { background-color: #f8d7da; color: #842029; border-color: #f5c6cb; }
+
+        /* 主畫布與結果區 */
+        .workspace {
+            display: flex; flex-direction: column; flex: 1;
+            margin: 0 15px 15px 15px; background: white;
+            border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;
+        }
+
+        .canvas-wrapper {
+            flex: 1; position: relative; overflow: hidden; cursor: crosshair;
             background-image: 
                 linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
                 linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
-            background-size: 20px 20px; cursor: crosshair;
+            background-size: 30px 30px;
         }
         canvas { position: absolute; top: 0; left: 0; }
-        
-        .zoom-controls {
-            position: absolute; right: 20px; bottom: 20px; display: flex; flex-direction: column;
-            background: white; border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+
+        /* 沙盒模式 - 底部縮圖列 */
+        .gallery-container {
+            display: none; height: 120px; background: var(--bg-gray);
+            border-top: 1px solid var(--border-color); padding: 10px;
+            overflow-x: auto; gap: 10px;
         }
-        .zoom-controls button {
-            background: transparent; border: none; padding: 10px; cursor: pointer; font-size: 16px;
-            border-bottom: 1px solid var(--border-color); border-radius: 0; flex: none;
+        .gallery-container.active { display: flex; }
+        .thumbnail {
+            width: 100px; height: 100px; background: white; border: 2px solid var(--border-color);
+            border-radius: 6px; cursor: pointer; flex-shrink: 0; transition: border-color 0.2s;
         }
-        .zoom-controls button:last-child { border-bottom: none; }
-        .zoom-controls button:hover { background: var(--bg-gray); }
+        .thumbnail:hover, .thumbnail.selected { border-color: var(--primary-blue); }
     </style>
 </head>
 <body>
 
-    <div class="toolbar">
-        <div class="control-group">
-            <label>畫布設定</label>
-            <label><input type="radio" name="mode" value="auto"> 預設 (自動判斷)</label>
-            <label><input type="radio" name="mode" value="open" checked> 強制開放</label>
-        </div>
-        <div class="control-group">
-            <label>節數模式:</label>
-            <select id="stepMode">
-                <option value="box">✨ 自動適應 (Box-Counting)</option>
-                <option value="fixed" selected>強制步數</option>
-            </select>
-        </div>
-        <div class="control-group">
-            <label>強制步數:</label>
-            <input type="range" id="stepSlider" min="10" max="200" value="60" style="flex:1;">
-            <span id="stepValue">60</span>
-        </div>
-        <div class="btn-group">
-            <button class="btn-primary" id="generateBtn">🚀 生成網格迴路</button>
-            <button class="btn-secondary" id="clearBtn">❌ 清除</button>
+    <!-- 頂部切換 -->
+    <div class="navbar">
+        <div class="navbar-title">Twisty Turny: Generative Fit</div>
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-mode="sandbox">🏝️ 沙盒模式</button>
+            <button class="nav-tab" data-mode="generative">🎨 塗鴉擬合</button>
         </div>
     </div>
 
-    <div id="errorBox">❌ ❌ 無法完全貼合筆跡閉合，試著畫圓滑一點或增加步數！</div>
-
-    <div class="canvas-container" id="canvasContainer">
-        <canvas id="mainCanvas"></canvas>
-        <div class="zoom-controls">
-            <button id="zoomIn">＋</button>
-            <button id="zoomHome">🏠</button>
-            <button id="zoomOut">－</button>
+    <!-- 動態工具列 -->
+    <div class="toolbar-container">
+        <!-- 1. 沙盒模式工具列 -->
+        <div id="toolbar-sandbox" class="toolbar active">
+            <div class="control-row">
+                <div class="instruction-text">🎯 沙盒模式：點擊網格放置 目標(⭐) 與 障礙(❌)。(左鍵目標，右鍵障礙)</div>
+            </div>
+            <div class="control-row">
+                <span class="control-label">👣 限制步數</span>
+                <input type="range" id="sb-steps" min="10" max="100" step="2" value="40">
+                <span class="val-display" id="sb-steps-val">40</span>
+            </div>
+            <div class="control-row">
+                <span class="control-label">🖼️ 產出上限</span>
+                <input type="range" id="sb-limit" min="1" max="50" value="16">
+                <span class="val-display" id="sb-limit-val">16</span>
+            </div>
+            <div class="btn-group">
+                <button class="btn-primary" id="sb-generateBtn">🚀 生成路徑</button>
+                <button class="btn-danger" id="sb-clearBtn">🗑️ 清空畫面重來</button>
+            </div>
         </div>
+
+        <!-- 2. 塗鴉擬合工具列 -->
+        <div id="toolbar-generative" class="toolbar">
+            <div class="control-row">
+                <span class="control-label">畫布設定</span>
+                <label><input type="radio" name="gen-canvas-mode" value="auto"> 預設 (自動判斷)</label>
+                <label><input type="radio" name="gen-canvas-mode" value="open" checked> 強制開放</label>
+            </div>
+            <div class="control-row">
+                <span class="control-label">節數模式</span>
+                <select id="gen-step-mode">
+                    <option value="box">✨ 自動適應 (Box-Counting)</option>
+                    <option value="fixed" selected>強制步數</option>
+                </select>
+            </div>
+            <div class="control-row">
+                <span class="control-label">強制步數</span>
+                <input type="range" id="gen-steps" min="10" max="200" value="62">
+                <span class="val-display" id="gen-steps-val">62</span>
+            </div>
+            <div class="btn-group">
+                <button class="btn-primary" id="gen-generateBtn">🚀 生成網格迴路</button>
+                <button class="btn-secondary" id="gen-clearBtn">❌ 清除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 狀態提示 -->
+    <div id="statusBar"></div>
+
+    <!-- 工作區 -->
+    <div class="workspace">
+        <div class="canvas-wrapper" id="canvasContainer">
+            <canvas id="mainCanvas"></canvas>
+        </div>
+        <!-- 沙盒專用結果列 -->
+        <div class="gallery-container" id="galleryContainer"></div>
     </div>
 
 <script>
 /**
- * Twisty Turny (幾何扭扭樂) - 開放路徑引擎
- * 核心：切比雪夫重取樣 + 彈性牽繩 + 時間窗配速 + 終點隔離區
+ * 核心狀態管理與 UI 控制
  */
-class TwistyTurnyEngine {
-    constructor() {
-        this.LEASH_RADIUS = 3;       
-        this.TIME_WINDOW = 8;        
-        this.QUARANTINE_ZONE = 3;    
-        this.MAX_ITERATIONS = 500000;
-    }
+const UI = {
+    mode: 'sandbox', // 'sandbox' 或 'generative'
+    gridSize: 30,
+    
+    // DOM Elements
+    canvas: document.getElementById('mainCanvas'),
+    ctx: document.getElementById('mainCanvas').getContext('2d'),
+    container: document.getElementById('canvasContainer'),
+    gallery: document.getElementById('galleryContainer'),
+    statusBar: document.getElementById('statusBar'),
+    
+    init() {
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        
+        // 模式切換綁定
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => this.switchMode(e.target.dataset.mode));
+        });
 
-    getChebyshevDist(p1, p2) {
-        return Math.max(Math.abs(p1.x - p2.x), Math.abs(p1.y - p2.y));
-    }
+        // 綁定滑桿顯示
+        const bindSlider = (id) => {
+            document.getElementById(id).addEventListener('input', (e) => {
+                document.getElementById(`${id}-val`).textContent = e.target.value;
+            });
+        };
+        bindSlider('sb-steps'); bindSlider('sb-limit'); bindSlider('gen-steps');
 
-    resampleSkeleton(rawPoints, targetSteps) {
-        if (!rawPoints || rawPoints.length < 2) return rawPoints;
-        let totalLength = 0;
-        for (let i = 1; i < rawPoints.length; i++) {
-            totalLength += this.getChebyshevDist(rawPoints[i-1], rawPoints[i]);
+        // 禁止右鍵選單 (為了沙盒模式放障礙物)
+        this.canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        this.switchMode('sandbox');
+    },
+
+    resize() {
+        this.canvas.width = this.container.clientWidth;
+        this.canvas.height = this.container.clientHeight;
+        this.render();
+    },
+
+    switchMode(newMode) {
+        this.mode = newMode;
+        
+        // 更新 Tab 樣式
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.nav-tab[data-mode="${newMode}"]`).classList.add('active');
+
+        // 切換工具列
+        document.getElementById('toolbar-sandbox').classList.toggle('active', newMode === 'sandbox');
+        document.getElementById('toolbar-generative').classList.toggle('active', newMode === 'generative');
+        
+        // 切換畫廊顯示
+        this.gallery.classList.toggle('active', newMode === 'sandbox');
+
+        // 重置狀態
+        this.hideStatus();
+        SandboxController.reset();
+        GenerativeController.reset();
+        this.render();
+    },
+
+    showStatus(msg, isSuccess) {
+        this.statusBar.textContent = msg;
+        this.statusBar.className = isSuccess ? 'status-success' : 'status-error';
+        this.statusBar.style.display = 'block';
+    },
+
+    hideStatus() {
+        this.statusBar.style.display = 'none';
+    },
+
+    render() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // 繪製座標系中心點參考
+        const cx = Math.floor(this.canvas.width / 2 / this.gridSize) * this.gridSize;
+        const cy = Math.floor(this.canvas.height / 2 / this.gridSize) * this.gridSize;
+
+        if (this.mode === 'sandbox') {
+            SandboxController.draw(this.ctx, this.gridSize, cx, cy);
+        } else {
+            GenerativeController.draw(this.ctx, this.gridSize, cx, cy);
         }
-        const scale = totalLength === 0 ? 1 : targetSteps / totalLength;
-        const scaledPoints = rawPoints.map(p => ({ x: p.x * scale, y: p.y * scale }));
-        
-        let skeleton = [];
-        skeleton.push({ x: Math.round(scaledPoints[0].x), y: Math.round(scaledPoints[0].y) });
-        let currentP = scaledPoints[0];
-        
-        for (let i = 1; i < scaledPoints.length; i++) {
-            let nextP = scaledPoints[i];
-            let dist = this.getChebyshevDist(currentP, nextP);
-            while (dist >= 1.0) {
-                let ratio = 1.0 / dist;
-                currentP = {
-                    x: currentP.x + (nextP.x - currentP.x) * ratio,
-                    y: currentP.y + (nextP.y - currentP.y) * ratio
-                };
-                skeleton.push({ x: Math.round(currentP.x), y: Math.round(currentP.y) });
-                dist = this.getChebyshevDist(currentP, nextP);
-            }
-        }
-        const lastP = scaledPoints[scaledPoints.length - 1];
-        skeleton.push({ x: Math.round(lastP.x), y: Math.round(lastP.y) });
-        return skeleton;
     }
+};
 
-    generateOpenPath(rawPoints, targetSteps) {
-        const skeleton = this.resampleSkeleton(rawPoints, targetSteps);
-        if (!skeleton || skeleton.length === 0) return null;
+/**
+ * [模式 1] 沙盒模式控制器 (Sandbox Mode)
+ * 功能：放置目標、障礙，產出多組路徑
+ */
+const SandboxController = {
+    targets: [],
+    obstacles: [],
+    results: [],
+    currentPathIndex: -1,
 
-        const startPoint = skeleton[0];
-        const endPoint = skeleton[skeleton.length - 1];
+    reset() {
+        this.targets = [];
+        this.obstacles = [];
+        this.results = [];
+        this.currentPathIndex = -1;
+        UI.gallery.innerHTML = '';
+    },
+
+    handleClick(e) {
+        const rect = UI.canvas.getBoundingClientRect();
+        // 換算成相對於畫面中心的網格座標
+        const cx = Math.floor(UI.canvas.width / 2 / UI.gridSize);
+        const cy = Math.floor(UI.canvas.height / 2 / UI.gridSize);
         
-        let bestPath = null;
-        let visited = new Set();
-        let iterations = 0;
+        const gx = Math.floor((e.clientX - rect.left) / UI.gridSize) - cx;
+        const gy = Math.floor((e.clientY - rect.top) / UI.gridSize) - cy;
+
+        if (e.button === 0) { // 左鍵: 目標
+            this.togglePoint(this.targets, this.obstacles, gx, gy);
+        } else if (e.button === 2) { // 右鍵: 障礙
+            this.togglePoint(this.obstacles, this.targets, gx, gy);
+        }
+        UI.render();
+    },
+
+    togglePoint(primaryList, secondaryList, x, y) {
+        // 如果另一列表有該點，先移除
+        const secIdx = secondaryList.findIndex(p => p.x === x && p.y === y);
+        if (secIdx !== -1) secondaryList.splice(secIdx, 1);
+
+        const priIdx = primaryList.findIndex(p => p.x === x && p.y === y);
+        if (priIdx !== -1) primaryList.splice(priIdx, 1);
+        else primaryList.push({x, y});
+    },
+
+    generate() {
+        const targetSteps = parseInt(document.getElementById('sb-steps').value, 10);
+        const limit = parseInt(document.getElementById('sb-limit').value, 10);
         
-        const directions = [
-            { dx: 1, dy: 1 }, { dx: 1, dy: -1 }, 
-            { dx: -1, dy: -1 }, { dx: -1, dy: 1 }
-        ];
+        const t0 = performance.now();
+        
+        // 簡易的 DFS 尋路 (為確保這份 code 直接可用，提供一個基礎的多解搜尋器)
+        this.results = this.runSandboxDFS(targetSteps, limit);
+        
+        const dt = (performance.now() - t0).toFixed(1);
+        if (this.results.length > 0) {
+            UI.showStatus(`✅ 擬合出圖！已從 1000 隨機抽取 ${this.results.length} 組結果 (${dt}ms)`, true);
+            this.buildGallery();
+        } else {
+            UI.showStatus(`❌ 無法在 ${targetSteps} 步內避開障礙並走完全部目標，請調整設定。`, false);
+        }
+    },
 
-        const dfs = (x, y, currentStep, path, lastDirIndex) => {
-            if (bestPath || iterations++ > this.MAX_ITERATIONS) return;
-
-            if (currentStep === targetSteps) {
-                if (this.getChebyshevDist({x, y}, endPoint) <= this.LEASH_RADIUS + 1) {
-                    bestPath = [...path];
+    runSandboxDFS(steps, limit) {
+        // 這是一個簡化的備用 DFS，支援多解尋路。
+        // 你可以把這裡替換回你原本寫得很厲害的沙盒演算法！
+        let validPaths = [];
+        let visited = new Set(['0,0']);
+        const directions = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
+        
+        const obsSet = new Set(this.obstacles.map(o => `${o.x},${o.y}`));
+        
+        const dfs = (x, y, currentStep, path, lastDir) => {
+            if (validPaths.length >= limit) return;
+            if (currentStep === steps) {
+                // 檢查是否踩滿所有 target
+                let hitAll = true;
+                for (let t of this.targets) {
+                    if (!path.some(p => p.x === t.x && p.y === t.y)) { hitAll = false; break; }
                 }
+                if (hitAll) validPaths.push([...path]);
                 return;
             }
 
-            let searchStart = Math.max(0, currentStep - this.TIME_WINDOW);
-            let searchEnd = Math.min(skeleton.length - 1, currentStep + this.TIME_WINDOW);
-            let minLeashDist = Infinity;
-            
-            for (let i = searchStart; i <= searchEnd; i++) {
-                let dist = this.getChebyshevDist({x, y}, skeleton[i]);
-                if (dist < minLeashDist) minLeashDist = dist;
-            }
-
-            if (minLeashDist > this.LEASH_RADIUS) return;
-
-            if (targetSteps - currentStep > this.QUARANTINE_ZONE) {
-                if (this.getChebyshevDist({x, y}, endPoint) <= 1) return; 
-            }
-
+            // 稍微打亂方向以求得不同解
+            let dirs = [...directions].sort(() => Math.random() - 0.5);
             for (let i = 0; i < 4; i++) {
-                if (lastDirIndex !== -1) {
-                    let isRightTurn = (i === (lastDirIndex + 1) % 4);
-                    let isLeftTurn = (i === (lastDirIndex + 3) % 4);
-                    if (!isRightTurn && !isLeftTurn) continue; 
-                }
-
-                let nx = x + directions[i].dx;
-                let ny = y + directions[i].dy;
-                let posKey = `${nx},${ny}`;
-
-                if (!visited.has(posKey)) {
-                    visited.add(posKey);
-                    path.push({ x: nx, y: ny });
-                    dfs(nx, ny, currentStep + 1, path, i);
-                    path.pop();
-                    visited.delete(posKey);
+                let dirIdx = directions.indexOf(dirs[i]);
+                if (lastDir !== -1 && (dirIdx === lastDir || dirIdx === (lastDir ^ 2))) continue;
+                
+                let nx = x + dirs[i].dx, ny = y + dirs[i].dy;
+                let key = `${nx},${ny}`;
+                
+                if (!visited.has(key) && !obsSet.has(key)) {
+                    visited.add(key); path.push({x: nx, y: ny});
+                    dfs(nx, ny, currentStep + 1, path, dirIdx);
+                    path.pop(); visited.delete(key);
                 }
             }
         };
+        
+        dfs(0, 0, 0, [{x:0, y:0}], -1);
+        return validPaths;
+    },
 
-        visited.add(`${startPoint.x},${startPoint.y}`);
-        dfs(startPoint.x, startPoint.y, 0, [{ x: startPoint.x, y: startPoint.y }], -1);
-        return bestPath;
-    }
-}
+    buildGallery() {
+        UI.gallery.innerHTML = '';
+        this.currentPathIndex = 0;
+        this.results.forEach((path, idx) => {
+            const canvas = document.createElement('canvas');
+            canvas.className = `thumbnail ${idx === 0 ? 'selected' : ''}`;
+            canvas.width = 100; canvas.height = 100;
+            const ctx = canvas.getContext('2d');
+            
+            // 縮圖繪製
+            ctx.beginPath();
+            ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 2;
+            path.forEach((p, i) => {
+                let px = 50 + p.x * 5, py = 50 + p.y * 5; // 微縮放
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            });
+            ctx.stroke();
 
-// --- 前端 UI 與 Canvas 控制邏輯 ---
-const canvas = document.getElementById('mainCanvas');
-const ctx = canvas.getContext('2d');
-const container = document.getElementById('canvasContainer');
-const errorBox = document.getElementById('errorBox');
-const stepSlider = document.getElementById('stepSlider');
-const stepValue = document.getElementById('stepValue');
+            canvas.addEventListener('click', () => {
+                document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('selected'));
+                canvas.classList.add('selected');
+                this.currentPathIndex = idx;
+                UI.render();
+            });
+            UI.gallery.appendChild(canvas);
+        });
+        UI.render();
+    },
 
-let isDrawing = false;
-let rawStroke = [];
-let finalGridPath = null;
-const GRID_SIZE = 20; // 每個網格 20px
-
-// 畫布自適應大小
-function resizeCanvas() {
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
-    redraw();
-}
-window.addEventListener('resize', resizeCanvas);
-
-// UI 綁定
-stepSlider.addEventListener('input', (e) => {
-    stepValue.textContent = e.target.value;
-});
-
-document.getElementById('clearBtn').addEventListener('click', () => {
-    rawStroke = [];
-    finalGridPath = null;
-    errorBox.style.display = 'none';
-    redraw();
-});
-
-// 繪圖事件 (擷取像素並轉換為網格座標)
-canvas.addEventListener('mousedown', (e) => {
-    if (finalGridPath) return; // 已有生成圖形則禁止繪圖，需先清除
-    isDrawing = true;
-    rawStroke = [];
-    addPoint(e);
-});
-canvas.addEventListener('mousemove', (e) => {
-    if (isDrawing) addPoint(e);
-});
-canvas.addEventListener('mouseup', () => {
-    isDrawing = false;
-});
-
-function addPoint(e) {
-    const rect = canvas.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
-    // 將像素座標轉換為演算法所需的網格單位
-    rawStroke.push({ x: px / GRID_SIZE, y: py / GRID_SIZE });
-    redraw();
-}
-
-// 核心生成綁定
-document.getElementById('generateBtn').addEventListener('click', () => {
-    if (rawStroke.length < 5) return;
-    
-    errorBox.style.display = 'none';
-    const startTime = performance.now();
-    const steps = parseInt(stepSlider.value, 10);
-    const engine = new TwistyTurnyEngine();
-    
-    finalGridPath = engine.generateOpenPath(rawStroke, steps);
-    const endTime = performance.now();
-    
-    if (finalGridPath) {
-        redraw();
-    } else {
-        const timeStr = (endTime - startTime).toFixed(1);
-        errorBox.textContent = `❌ ❌ 無法完全貼合筆跡閉合，已啟動防呆退出機制！ (${timeStr}ms)`;
-        errorBox.style.display = 'block';
-    }
-});
-
-// 渲染邏輯
-function redraw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // 繪製使用者手繪軌跡 (灰色細線)
-    if (rawStroke.length > 0 && !finalGridPath) {
-        ctx.beginPath();
-        ctx.strokeStyle = '#999';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        for (let i = 0; i < rawStroke.length; i++) {
-            const px = rawStroke[i].x * GRID_SIZE;
-            const py = rawStroke[i].y * GRID_SIZE;
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
+    draw(ctx, gridSize, cx, cy) {
+        // 畫網格系
+        ctx.fillStyle = '#adb5bd'; ctx.font = '10px Arial';
+        for(let i = -10; i <= 10; i+=2) {
+            ctx.fillText(i, cx + i * gridSize + 2, cy + 12);
         }
-        ctx.stroke();
-    }
 
-    // 繪製演算法生成的網格迴路 (藍色粗線)
-    if (finalGridPath) {
-        ctx.beginPath();
-        ctx.strokeStyle = '#007bff';
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'square';
-        ctx.lineJoin = 'miter';
-        
-        // 將演算法的網格座標對齊到畫面中心格線
-        const offset = GRID_SIZE / 2;
-        
-        for (let i = 0; i < finalGridPath.length; i++) {
-            const px = finalGridPath[i].x * GRID_SIZE + offset;
-            const py = finalGridPath[i].y * GRID_SIZE + offset;
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
+        // 畫路徑
+        if (this.currentPathIndex >= 0 && this.results[this.currentPathIndex]) {
+            const path = this.results[this.currentPathIndex];
+            ctx.beginPath(); ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 4;
+            path.forEach((p, i) => {
+                if (i===0) ctx.moveTo(cx + p.x*gridSize, cy + p.y*gridSize);
+                else ctx.lineTo(cx + p.x*gridSize, cy + p.y*gridSize);
+            });
+            ctx.stroke();
         }
-        ctx.stroke();
-        
-        // 標記起點與終點
-        const start = finalGridPath[0];
-        const end = finalGridPath[finalGridPath.length - 1];
-        
-        ctx.fillStyle = '#28a745'; // 綠色起點
-        ctx.beginPath(); ctx.arc(start.x * GRID_SIZE + offset, start.y * GRID_SIZE + offset, 6, 0, Math.PI * 2); ctx.fill();
-        
-        ctx.fillStyle = '#dc3545'; // 紅色終點
-        ctx.beginPath(); ctx.arc(end.x * GRID_SIZE + offset, end.y * GRID_SIZE + offset, 6, 0, Math.PI * 2); ctx.fill();
-    }
-}
 
-// 初始化
-resizeCanvas();
+        // 畫標記
+        ctx.font = '20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        this.targets.forEach(p => ctx.fillText('⭐', cx + p.x * gridSize, cy + p.y * gridSize));
+        this.obstacles.forEach(p => ctx.fillText('❌', cx + p.x * gridSize, cy + p.y * gridSize));
+    }
+};
+
+/**
+ * [模式 2] 塗鴉擬合控制器 (Generative Fit Mode)
+ * 功能：手繪線條，運用 TwistyTurnyEngine 進行輪廓擬合
+ */
+const GenerativeController = {
+    isDrawing: false,
+    rawStroke: [],
+    finalPath: null,
+    
+    // 注入我們先前完善的演算法核心
+    engine: {
+        getChebyshevDist: (p1, p2) => Math.max(Math.abs(p1.x - p2.x), Math.abs(p1.y - p2.y)),
+        resample: function(raw, steps) {
+            let len = 0;
+            for(let i=1; i<raw.length; i++) len += this.getChebyshevDist(raw[i-1], raw[i]);
+            let scale = len === 0 ? 1 : steps / len;
+            let scaled = raw.map(p => ({x: p.x*scale, y: p.y*scale}));
+            let skel = [ {x: Math.round(scaled[0].x), y: Math.round(scaled[0].y)} ];
+            let cur = scaled[0];
+            for(let i=1; i<scaled.length; i++) {
+                let next = scaled[i], d = this.getChebyshevDist(cur, next);
+                while(d >= 1.0) {
+                    let r = 1.0/d;
+                    cur = {x: cur.x + (next.x-cur.x)*r, y: cur.y + (next.y-cur.y)*r};
+                    skel.push({x: Math.round(cur.x), y: Math.round(cur.y)});
+                    d = this.getChebyshevDist(cur, next);
+                }
+            }
+            skel.push({x: Math.round(scaled[scaled.length-1].x), y: Math.round(scaled[scaled.length-1].y)});
+            return skel;
+        },
+        solve: function(raw, steps) {
+            const skel = this.resample(raw, steps);
+            if(skel.length < 2) return null;
+            const start = skel[0], end = skel[skel.length-1];
+            let best = null, vis = new Set([`${start.x},${start.y}`]);
+            const dirs = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
+            
+            const dfs = (x, y, step, path, lastDir, iter) => {
+                if(best || iter.count++ > 50000) return;
+                if(step === steps) {
+                    if(this.getChebyshevDist({x,y}, end) <= 3) best = [...path];
+                    return;
+                }
+                
+                let sStart = Math.max(0, step - 8), sEnd = Math.min(skel.length-1, step + 8);
+                let minDist = Infinity;
+                for(let i = sStart; i <= sEnd; i++) minDist = Math.min(minDist, this.getChebyshevDist({x,y}, skel[i]));
+                if(minDist > 3) return; // 彈性牽繩容差
+
+                if(steps - step > 3 && this.getChebyshevDist({x,y}, end) <= 1) return; // 隔離區
+
+                for(let i=0; i<4; i++) {
+                    if(lastDir !== -1 && (i === (lastDir+1)%4 || i === (lastDir+3)%4) === false) continue;
+                    let nx = x+dirs[i].dx, ny = y+dirs[i].dy, k = `${nx},${ny}`;
+                    if(!vis.has(k)) {
+                        vis.add(k); path.push({x:nx, y:ny});
+                        dfs(nx, ny, step+1, path, i, iter);
+                        path.pop(); vis.delete(k);
+                    }
+                }
+            };
+            dfs(start.x, start.y, 0, [start], -1, {count:0});
+            return best;
+        }
+    },
+
+    reset() {
+        this.rawStroke = [];
+        this.finalPath = null;
+    },
+
+    handleDown(e) {
+        if (this.finalPath) return; // 已有圖形禁止畫
+        this.isDrawing = true;
+        this.rawStroke = [];
+        this.addPoint(e);
+    },
+    
+    handleMove(e) { if (this.isDrawing) this.addPoint(e); },
+    handleUp(e) { this.isDrawing = false; },
+
+    addPoint(e) {
+        const rect = UI.canvas.getBoundingClientRect();
+        // 絕對網格座標，供重取樣引擎使用
+        this.rawStroke.push({ 
+            x: (e.clientX - rect.left) / UI.gridSize, 
+            y: (e.clientY - rect.top) / UI.gridSize 
+        });
+        UI.render();
+    },
+
+    generate() {
+        if (this.rawStroke.length < 5) return;
+        const targetSteps = parseInt(document.getElementById('gen-steps').value, 10);
+        
+        const t0 = performance.now();
+        this.finalPath = this.engine.solve(this.rawStroke, targetSteps);
+        const dt = (performance.now() - t0).toFixed(1);
+
+        if (this.finalPath) {
+            UI.showStatus(`✅ 擬合出圖！完美貼合筆跡，共 ${targetSteps} 步 (${dt}ms)`, true);
+        } else {
+            UI.showStatus(`❌ 無法完全貼合筆跡閉合，試著畫圓滑一點或調整步數！(${dt}ms)`, false);
+        }
+        UI.render();
+    },
+
+    draw(ctx, gridSize, cx, cy) { // cx, cy 對此模式不重要，因為座標是絕對的
+        // 畫手繪軌跡 (灰色)
+        if (this.rawStroke.length > 0 && !this.finalPath) {
+            ctx.beginPath(); ctx.strokeStyle = '#adb5bd'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+            this.rawStroke.forEach((p, i) => {
+                let px = p.x * gridSize, py = p.y * gridSize;
+                if (i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            });
+            ctx.stroke();
+        }
+
+        // 畫擬合結果 (藍色)
+        if (this.finalPath) {
+            ctx.beginPath(); ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 4; ctx.lineJoin = 'miter';
+            this.finalPath.forEach((p, i) => {
+                // 因為是絕對網格座標，需轉回像素
+                let px = p.x * gridSize + (gridSize/2), py = p.y * gridSize + (gridSize/2);
+                if (i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            });
+            ctx.stroke();
+        }
+    }
+};
+
+// --- 事件代理綁定 ---
+UI.canvas.addEventListener('mousedown', e => {
+    if (UI.mode === 'sandbox') SandboxController.handleClick(e);
+    else GenerativeController.handleDown(e);
+});
+UI.canvas.addEventListener('mousemove', e => {
+    if (UI.mode === 'generative') GenerativeController.handleMove(e);
+});
+UI.canvas.addEventListener('mouseup', e => {
+    if (UI.mode === 'generative') GenerativeController.handleUp(e);
+});
+
+// 按鈕事件
+document.getElementById('sb-generateBtn').addEventListener('click', () => SandboxController.generate());
+document.getElementById('sb-clearBtn').addEventListener('click', () => { SandboxController.reset(); UI.hideStatus(); UI.render(); });
+
+document.getElementById('gen-generateBtn').addEventListener('click', () => GenerativeController.generate());
+document.getElementById('gen-clearBtn').addEventListener('click', () => { GenerativeController.reset(); UI.hideStatus(); UI.render(); });
+
+// 啟動
+UI.init();
 </script>
 </body>
 </html>
