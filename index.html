@@ -1,531 +1,772 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Twisty Turny: Generative Fit</title>
-    <style>
-        :root {
-            --primary-blue: #0d6efd;
-            --primary-red: #dc3545;
-            --bg-dark: #212529;
-            --bg-gray: #f8f9fa;
-            --border-color: #dee2e6;
-            --grid-line: #e9ecef;
-            --text-dark: #212529;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="google" content="notranslate">
+<title>Twisty Turny 極速尋路引擎 (Web Worker 無限制運算版)</title>
+<style>
+  :root { --cell: 40px; }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
 
-        body, html {
-            margin: 0; padding: 0; height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #e9ecef;
-            display: flex; flex-direction: column;
-            overflow: hidden;
-        }
+  #controls {
+      padding: 10px; background: #fff; border-radius: 8px; margin: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #ddd;
+      display: flex; flex-direction: column; gap: 10px;
+  }
 
-        /* 頂部導覽列 */
-        .navbar {
-            background-color: var(--bg-dark); padding: 10px 20px;
-            display: flex; justify-content: space-between; align-items: center; color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 100;
-        }
-        .navbar-title { font-size: 1.1rem; font-weight: bold; }
-        .nav-tabs { display: flex; gap: 8px; }
-        .nav-tab {
-            padding: 6px 14px; border-radius: 6px; cursor: pointer;
-            background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #adb5bd;
-            font-weight: bold; font-size: 0.9rem; transition: all 0.2s;
-        }
-        .nav-tab.active { background-color: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+  .tutorial-box {
+      background: #e9ecef; border-left: 4px solid #007bff; padding: 12px 15px;
+      border-radius: 6px; font-size: 13.5px; color: #333; width: 100%; box-sizing: border-box; line-height: 1.6;
+  }
+  .tutorial-box strong { color: #0056b3; font-size: 15px; display: block; margin-bottom: 6px; }
+  .tutorial-box p { margin: 0 0 6px 0; font-weight: bold; }
+  
+  .slider-group { display: flex; align-items: center; gap: 8px; font-weight: bold; color: #444; font-size: 14px;}
+  input[type=range] { flex-grow: 1; cursor: pointer; }
+  .val-badge { background: #333; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 12px; min-width: 25px; text-align: center;}
+  
+  .btn-reset { padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; background: #dc3545; color: #fff; width: 100%; font-size: 16px; box-shadow: 0 2px 4px rgba(220,53,69,0.3); transition: transform 0.1s;}
+  .btn-reset:active { transform: scale(0.98); }
 
-        /* 工具列 */
-        .toolbar-container { background: white; margin: 10px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
-        .toolbar { display: none; padding: 12px 20px; flex-direction: column; gap: 10px; }
-        .toolbar.active { display: flex; }
+  #scroll-wrapper { width: calc(100% - 20px); height: 50vh; overflow: auto; border: 2px solid #ccc; background: #fff; border-radius: 6px; margin: 0 10px; position: relative;}
+  #layout-grid { display: grid; grid-template-columns: 35px max-content; grid-template-rows: 35px max-content; width: max-content; }
 
-        .control-row { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; font-size: 0.9rem; }
-        .instruction-text { color: #6c757d; background: var(--bg-gray); padding: 5px 10px; border-radius: 4px; width: 100%; }
-        
-        input[type="range"] { flex: 1; min-width: 180px; }
-        .val-display { font-weight: bold; color: var(--primary-blue); min-width: 30px; text-align: right; }
-        
-        .btn-group { display: flex; gap: 10px; width: 100%; margin-top: 4px; }
-        button {
-            padding: 8px 16px; border: none; border-radius: 6px; font-size: 0.95rem;
-            font-weight: bold; cursor: pointer; flex: 1;
-        }
-        .btn-primary { background-color: var(--primary-blue); color: white; }
-        .btn-danger { background-color: var(--primary-red); color: white; }
-        .btn-secondary { background-color: #e2e6ea; color: var(--text-dark); }
+  #corner { grid-column: 1; grid-row: 1; position: sticky; top: 0; left: 0; z-index: 20; background: #eaeaea; border-right: 1px solid #aaa; border-bottom: 1px solid #aaa; }
+  #axis-x { grid-column: 2; grid-row: 1; position: sticky; top: 0; z-index: 15; background: #f4f4f4; border-bottom: 1px solid #aaa; }
+  #axis-y { grid-column: 1; grid-row: 2; position: sticky; left: 0; z-index: 15; background: #f4f4f4; border-right: 1px solid #aaa; }
 
-        /* 狀態提示 */
-        #statusBar { padding: 6px; text-align: center; font-size: 0.85rem; font-weight: bold; display: none; }
-        .status-success { background-color: #d1e7dd; color: #0f5132; }
-        .status-error { background-color: #f8d7da; color: #842029; }
+  .axis-inner { position: relative; width: 100%; height: 100%; }
+  #board-container { grid-column: 2; grid-row: 2; padding: 20px; background: #fff; }
 
-        /* 工作區 */
-        .workspace {
-            display: flex; flex-direction: column; flex: 1;
-            margin: 0 10px 10px 10px; background: white;
-            border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); overflow: hidden; position: relative;
-        }
+  #board {
+      position: relative; 
+      background-size: var(--cell) var(--cell);
+      background-position: calc(var(--cell)/2) calc(var(--cell)/2);
+      background-image: linear-gradient(to right, #ddd 1px, transparent 1px), linear-gradient(to bottom, #ddd 1px, transparent 1px);
+      border-right: 1px solid #ddd; border-bottom: 1px solid #ddd;
+  }
 
-        .canvas-wrapper { flex: 1; position: relative; overflow: hidden; cursor: crosshair; }
-        canvas { display: block; width: 100%; height: 100%; }
+  .axis-label-x { position: absolute; bottom: 4px; transform: translateX(-50%); font-size: 11px; font-weight: bold; color: #555; }
+  .axis-label-y { position: absolute; right: 4px; transform: translateY(-50%); font-size: 11px; font-weight: bold; color: #555; }
 
-        /* 沙盒模式底部縮圖列 */
-        .gallery-container {
-            display: none; height: 110px; background: var(--bg-gray);
-            border-top: 1px solid var(--border-color); padding: 8px;
-            overflow-x: auto; gap: 8px; align-items: center;
-        }
-        .gallery-container.active { display: flex; }
-        .thumbnail {
-            width: 90px; height: 90px; background: white; border: 2px solid var(--border-color);
-            border-radius: 6px; cursor: pointer; flex-shrink: 0;
-        }
-        .thumbnail.selected { border-color: var(--primary-blue); box-shadow: 0 0 5px rgba(13,110,253,0.3); }
-    </style>
+  .node {
+      position: absolute; width: calc(var(--cell) * 0.8); height: calc(var(--cell) * 0.8);
+      transform: translate(-50%, -50%); border-radius: 50%; display: flex; justify-content: center; align-items: center;
+      transition: transform 0.1s; z-index: 5; 
+  }
+
+  .node.valid-parity { cursor: pointer; }
+  .node.valid-parity::before {
+      content: ''; position: absolute; width: 8px; height: 8px;
+      background: #cce5ff; border-radius: 50%; transition: all 0.2s; z-index: -1;
+  }
+  .node.valid-parity:hover::before { transform: scale(2.5); background: #99ccff; }
+  .node.target::before, .node.obstacle::before, .node.center::before { display: none; }
+
+  .node.invalid-parity {
+      width: 12px; height: 12px; min-width: 12px; min-height: 12px;
+      background-color: transparent; pointer-events: none; border-radius: 0;
+      background-image: 
+          linear-gradient(45deg, transparent 40%, #dee2e6 40%, #dee2e6 60%, transparent 60%),
+          linear-gradient(-45deg, transparent 40%, #dee2e6 40%, #dee2e6 60%, transparent 60%);
+  }
+
+  .node.target { font-size: calc(var(--cell) * 0.6); z-index: 6; text-shadow: 0 0 4px #fff;}
+  .node.obstacle { font-size: calc(var(--cell) * 0.5); z-index: 6; color: #dc3545; font-weight: bold;}
+  .node.center { font-size: calc(var(--cell) * 0.7); z-index: 7; cursor: not-allowed; }
+  
+  #svg-overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      transform: scaleY(-1); pointer-events: none; z-index: 4;
+  }
+  
+  .loader { display: inline-block; width: 12px; height: 12px; border: 2px solid #007bff; border-bottom-color: transparent; border-radius: 50%; animation: rotation 1s linear infinite; margin-right: 6px; vertical-align: middle;}
+  @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+  .error-pulse {
+      animation: shake-red 0.5s ease-in-out infinite alternate;
+      background-color: rgba(220, 53, 69, 0.4) !important;
+      border: 2px solid #dc3545; z-index: 20;
+  }
+  @keyframes shake-red {
+      0% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+      25% { transform: translate(-55%, -50%) scale(1.2) rotate(-10deg); }
+      50% { transform: translate(-45%, -50%) scale(1.2) rotate(10deg); }
+      75% { transform: translate(-55%, -50%) scale(1.2) rotate(-10deg); }
+      100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+  }
+
+  #results-container { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; justify-content: center; }
+  .thumb-card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; cursor: pointer; transition: transform 0.2s;}
+  .thumb-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-color: #007bff;}
+  .thumb-svg { width: 120px; height: 120px; transform: scaleY(-1); background: #fff; border: 1px solid #eee; border-radius: 4px;}
+  .thumb-title { font-size: 11px; color: #444; margin-top: 5px; font-weight: bold;}
+
+  #modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.7); z-index: 9999; justify-content: center; align-items: center;
+      flex-direction: column; backdrop-filter: blur(3px);
+  }
+  #modal-content {
+      background: #fff; padding: 20px; border-radius: 12px; max-width: 90%; max-height: 90vh;
+      display: flex; flex-direction: column; align-items: center; position: relative;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  }
+  #modal-svg-container {
+      width: 80vw; height: 50vh; max-width: 450px; max-height: 450px;
+      background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px;
+  }
+  .modal-svg { width: 100%; height: 100%; transform: scaleY(-1); }
+  #modal-close {
+      position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; cursor: pointer; color: #888; line-height: 1;
+  }
+  #modal-close:hover { color: #333; }
+  #modal-info { font-size: 14px; color: #444; text-align: left; width: 100%; line-height: 1.6; overflow-y: auto;}
+  .coord-tag { display: inline-block; background: #e9ecef; padding: 2px 8px; border-radius: 12px; margin: 2px; font-family: monospace; font-size: 13px; color: #333; border: 1px solid #ccc;}
+</style>
 </head>
-<body>
+<body class="notranslate">
 
-    <div class="navbar">
-        <div class="navbar-title">Twisty Turny: Generative Fit</div>
-        <div class="nav-tabs">
-            <button class="nav-tab active" data-mode="sandbox">🏝️ 沙盒模式</button>
-            <button class="nav-tab" data-mode="generative">🎨 塗鴉擬合</button>
-        </div>
+<div id="controls">
+  <div class="tutorial-box">
+    <strong>📖 操作教學：</strong>
+    <p>調整設定：<span style="font-weight: normal;">使用滑桿修改「總步數」與「產出上限」。</span></p>
+    <p>佈置網格：<span style="font-weight: normal;">點擊網格上帶有「淡藍色圓點」的交叉點來切換狀態：</span></p>
+    <div style="padding-left: 15px; margin-bottom: 6px;">
+        👉 點 1 下：設為 ⭐ 目標（路線必經此處）<br>
+        👉 點 2 下：設為 ❌ 障礙（路線不可經過）<br>
+        👉 點 3 下：恢復空白<br>
     </div>
+    <div style="color:#888; font-size: 11.5px; margin-bottom: 8px;">（註：灰色小叉叉 ✖ 代表幾何上永遠無法抵達的死區）</div>
+    <p>出圖：<span style="font-weight: normal;">背景無限制運算，直到達成數量要求！期間畫面不卡頓，若想放棄，隨時點擊網格或拉動滑桿即可中斷重來。</span></p>
+  </div>
 
-    <div class="toolbar-container">
-        <!-- 沙盒模式工具列 -->
-        <div id="toolbar-sandbox" class="toolbar active">
-            <div class="control-row">
-                <div class="instruction-text">🎯 沙盒模式：點擊網格放置 目標(⭐) 與 障礙(❌)。(左鍵目標，右鍵障礙)</div>
-            </div>
-            <div class="control-row">
-                <span>👣 限制步數</span>
-                <input type="range" id="sb-steps" min="10" max="100" step="2" value="40">
-                <span class="val-display" id="sb-steps-val">40</span>
-                <span>🖼️ 產出上限</span>
-                <input type="range" id="sb-limit" min="1" max="30" value="16">
-                <span class="val-display" id="sb-limit-val">16</span>
-            </div>
-            <div class="btn-group">
-                <button class="btn-primary" id="sb-generateBtn">🚀 生成路徑</button>
-                <button class="btn-danger" id="sb-clearBtn">🗑️ 清空畫面重來</button>
-            </div>
-        </div>
+  <div class="slider-group">
+    👣 步數: <input type="range" id="stepsInput" min="4" max="100" step="4" value="20" oninput="document.getElementById('stepsVal').innerText=this.value; initGrid(false); autoRun();">
+    <span class="val-badge" id="stepsVal">20</span>
+  </div>
+  <div class="slider-group">
+    🖼️ 上限: <input type="range" id="limitInput" min="1" max="20" step="1" value="5" oninput="document.getElementById('limitVal').innerText=this.value; autoRun();">
+    <span class="val-badge" id="limitVal">5</span>
+  </div>
+  <button class="btn-reset" onclick="initGrid(true); autoRun();">🗑️ 清空網格</button>
+  <div id="statusText" style="color: #666; font-size: 13px; font-weight: bold; text-align: center;">
+    系統就緒。背景平行運算引擎準備完畢。
+  </div>
+</div>
 
-        <!-- 塗鴉擬合工具列 -->
-        <div id="toolbar-generative" class="toolbar">
-            <div class="control-row">
-                <span>畫布設定</span>
-                <label><input type="radio" name="gen-canvas-mode" value="auto"> 預設 (自動判斷)</label>
-                <label><input type="radio" name="gen-canvas-mode" value="open" checked> 強制開放</label>
-                <span>節數模式</span>
-                <select id="gen-step-mode">
-                    <option value="box">✨ 自動適應</option>
-                    <option value="fixed" selected>強制步數</option>
-                </select>
-            </div>
-            <div class="control-row">
-                <span>強制步數</span>
-                <input type="range" id="gen-steps" min="10" max="200" value="62">
-                <span class="val-display" id="gen-steps-val">62</span>
-            </div>
-            <div class="btn-group">
-                <button class="btn-primary" id="gen-generateBtn">🚀 生成網格迴路</button>
-                <button class="btn-secondary" id="gen-clearBtn">❌ 清除重畫</button>
-            </div>
+<div id="scroll-wrapper">
+  <div id="layout-grid">
+    <div id="corner"></div>
+    <div id="axis-x"><div class="axis-inner" id="axis-x-inner"></div></div>
+    <div id="axis-y"><div class="axis-inner" id="axis-y-inner"></div></div>
+    <div id="board-container"><div id="board">
+        <svg id="svg-overlay"><path id="svg-path" d="" fill="none" stroke="#007bff" stroke-width="0.35" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.6));"/></svg>
+    </div></div>
+  </div>
+</div>
+
+<div id="results-container"></div>
+
+<div id="modal-overlay" onclick="if(event.target===this) closeModal()">
+    <div id="modal-content">
+        <div id="modal-close" onclick="closeModal()">&times;</div>
+        <h3 id="modal-title" style="margin-top: 0; margin-bottom: 10px; color: #333;"></h3>
+        <div id="modal-svg-container">
+            <svg class="modal-svg" preserveAspectRatio="xMidYMid meet">
+                <g id="modal-svg-content"></g>
+            </svg>
         </div>
+        <div id="modal-info"></div>
     </div>
-
-    <div id="statusBar"></div>
-
-    <div class="workspace">
-        <div class="canvas-wrapper" id="canvasContainer">
-            <canvas id="mainCanvas"></canvas>
-        </div>
-        <div class="gallery-container" id="galleryContainer"></div>
-    </div>
+</div>
 
 <script>
-const UI = {
-    mode: 'sandbox',
-    gridSize: 30,
-    canvas: document.getElementById('mainCanvas'),
-    ctx: document.getElementById('mainCanvas').getContext('2d'),
-    container: document.getElementById('canvasContainer'),
-    gallery: document.getElementById('galleryContainer'),
-    statusBar: document.getElementById('statusBar'),
-    
-    init() {
-        this.resize();
-        window.addEventListener('resize', () => this.resize());
-        
-        document.querySelectorAll('.nav-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => this.switchMode(e.target.dataset.mode));
-        });
+  /* =========================================================================
+     1. 定義 Web Worker 背景腳本 (將運算邏輯打包，丟進背景執行)
+     完全拔除時間限制，直到找到目標數量為止。
+  ========================================================================= */
+  const workerCode = `
+      const TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
+      const TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
+      const TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
 
-        const bindSlider = (id) => {
-            document.getElementById(id).addEventListener('input', (e) => {
-                document.getElementById(`${id}-val`).textContent = e.target.value;
-            });
-        };
-        bindSlider('sb-steps'); bindSlider('sb-limit'); bindSlider('gen-steps');
+      function solveTwistyTurnyOptimized(totalSteps, rawTargets, rawObstacles, requiredCount) {
+          const R = Math.floor(totalSteps / 2);
+          const W = 2 * R + 1;
+          const totalCells = W * W;
+          const getIdx = (x, y) => (y + R) * W + (x + R);
 
-        this.canvas.addEventListener('contextmenu', e => e.preventDefault());
-        this.switchMode('sandbox');
-    },
+          const targets = [];
+          for (let i = 0; i < rawTargets.length; i++) {
+              const t = rawTargets[i];
+              if (t[0] !== 0 || t[1] !== 0) targets.push(t);
+          }
+          const K = targets.length;
+          if (K > 20) return { status: "error", nodes: [], msg: "❌ 目標點過多 (上限 20 個)！" };
 
-    resize() {
-        this.canvas.width = this.container.clientWidth;
-        this.canvas.height = this.container.clientHeight;
-        this.render();
-    },
+          const obstacleMap = new Uint8Array(totalCells);
+          for (let i = 0; i < rawObstacles.length; i++) {
+              const o = rawObstacles[i];
+              if (Math.abs(o[0]) <= R && Math.abs(o[1]) <= R) {
+                  obstacleMap[getIdx(o[0], o[1])] = 1;
+              }
+          }
 
-    switchMode(newMode) {
-        this.mode = newMode;
-        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(`.nav-tab[data-mode="${newMode}"]`).classList.add('active');
+          if (obstacleMap[getIdx(0, 0)] === 1) return { status: "error", nodes: ["0,0"], msg: "❌ 起點不能是障礙物！" };
 
-        document.getElementById('toolbar-sandbox').classList.toggle('active', newMode === 'sandbox');
-        document.getElementById('toolbar-generative').classList.toggle('active', newMode === 'generative');
-        this.gallery.classList.toggle('active', newMode === 'sandbox');
+          for (let i = 0; i < K; i++) {
+              const tx = targets[i][0], ty = targets[i][1];
+              if (Math.abs(tx) > R || Math.abs(ty) > R) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標超出步數可達範圍！" };
+              if (obstacleMap[getIdx(tx, ty)] === 1) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標與障礙物重疊！" };
+              if ((Math.abs(tx) + Math.abs(ty)) % 2 !== 0) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標奇偶性錯誤，永遠無法抵達。" };
+          }
 
-        this.hideStatus();
-        SandboxController.reset();
-        GenerativeController.reset();
-        this.render();
-    },
+          const dist = (x1, y1, x2, y2) => Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
 
-    showStatus(msg, isSuccess) {
-        this.statusBar.textContent = msg;
-        this.statusBar.className = isSuccess ? 'status-success' : 'status-error';
-        this.statusBar.style.display = 'block';
-    },
-    hideStatus() { this.statusBar.style.display = 'none'; },
+          const P = K + 1;
+          const distMat = new Int32Array(P * P);
+          const ptsX = new Int32Array(P);
+          const ptsY = new Int32Array(P);
+          ptsX[0] = 0; ptsY[0] = 0;
+          for (let i = 0; i < K; i++) {
+              ptsX[i + 1] = targets[i][0];
+              ptsY[i + 1] = targets[i][1];
+          }
+          for (let i = 0; i < P; i++) {
+              for (let j = 0; j < P; j++) {
+                  distMat[i * P + j] = dist(ptsX[i], ptsY[i], ptsX[j], ptsY[j]);
+              }
+          }
 
-    render() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // 繪製背景格線與十字星
-        this.drawGridBackground();
+          const numMasks = 1 << K;
+          const dp = new Int32Array(numMasks * K);
+          dp.fill(-1);
 
-        if (this.mode === 'sandbox') {
-            SandboxController.draw(this.ctx, this.gridSize);
-        } else {
-            GenerativeController.draw(this.ctx, this.gridSize);
-        }
-    },
+          function getTspDist(mask, lastIdx) {
+              if (mask === 0) return distMat[(lastIdx + 1) * P + 0];
+              const memoKey = mask * K + lastIdx;
+              if (dp[memoKey] !== -1) return dp[memoKey];
 
-    drawGridBackground() {
-        const ctx = this.ctx;
-        const w = this.canvas.width, h = this.canvas.height;
-        const gs = this.gridSize;
+              let minVal = 1e9;
+              for (let next = 0; next < K; next++) {
+                  if ((mask & (1 << next)) !== 0) {
+                      const subMask = mask & ~(1 << next);
+                      const cost = distMat[(lastIdx + 1) * P + (next + 1)] + getTspDist(subMask, next);
+                      if (cost < minVal) minVal = cost;
+                  }
+              }
+              dp[memoKey] = minVal;
+              return minVal;
+          }
 
-        ctx.strokeStyle = '#e9ecef';
-        ctx.lineWidth = 1;
-        ctx.fillStyle = '#ced4da';
-        ctx.font = '9px sans-serif';
+          let minRequired = 0;
+          if (K > 0) {
+              minRequired = 1e9;
+              for (let first = 0; first < K; first++) {
+                  const cost = distMat[0 * P + (first + 1)] + getTspDist((numMasks - 1) & ~(1 << first), first);
+                  if (cost < minRequired) minRequired = cost;
+              }
+          }
+          if (minRequired > totalSteps) {
+              return { status: "error", nodes: targets.map(t => t[0] + "," + t[1]), msg: "❌ 步數不足：最少需 " + minRequired + " 步。" };
+          }
 
-        for (let x = 0; x < w; x += gs) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-        }
-        for (let y = 0; y < h; y += gs) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-        }
+          const qX = new Int32Array(totalCells);
+          const qY = new Int32Array(totalCells);
+          const flooded = new Uint8Array(totalCells);
+          let qHead = 0, qTail = 0;
 
-        // 十字交點與坐標
-        const cx = Math.floor(w / 2 / gs) * gs;
-        const cy = Math.floor(h / 2 / gs) * gs;
+          qX[qTail] = 0; qY[qTail] = 0; qTail++;
+          flooded[getIdx(0, 0)] = 1;
 
-        for (let x = gs / 2; x < w; x += gs) {
-            for (let y = gs / 2; y < h; y += gs) {
-                ctx.fillStyle = '#adb5bd';
-                ctx.fillRect(x - 1, y - 1, 2, 2);
-            }
-        }
-    }
-};
+          const fdx = [-1, 1, -1, 1];
+          const fdy = [1, 1, -1, -1];
+          while (qHead < qTail) {
+              const cx = qX[qHead], cy = qY[qHead]; qHead++;
+              for (let d = 0; d < 4; d++) {
+                  const nx = cx + fdx[d], ny = cy + fdy[d];
+                  if (Math.abs(nx) <= R && Math.abs(ny) <= R) {
+                      const nidx = getIdx(nx, ny);
+                      if (flooded[nidx] === 0 && obstacleMap[nidx] === 0) {
+                          flooded[nidx] = 1;
+                          qX[qTail] = nx; qY[qTail] = ny; qTail++;
+                      }
+                  }
+              }
+          }
 
-/**
- * 沙盒模式
- */
-const SandboxController = {
-    targets: [],
-    obstacles: [],
-    results: [],
-    currentIdx: -1,
+          for (let i = 0; i < K; i++) {
+              const tx = targets[i][0], ty = targets[i][1];
+              if (flooded[getIdx(tx, ty)] === 0) {
+                  return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標被孤立或超出極限範圍！" };
+              }
+          }
 
-    reset() {
-        this.targets = [];
-        this.obstacles = [];
-        this.results = [];
-        this.currentIdx = -1;
-        UI.gallery.innerHTML = '';
-    },
+          const targetBitMap = new Int8Array(totalCells);
+          targetBitMap.fill(-1);
+          for (let i = 0; i < K; i++) {
+              targetBitMap[getIdx(targets[i][0], targets[i][1])] = i;
+          }
 
-    handleClick(e) {
-        const rect = UI.canvas.getBoundingClientRect();
-        const px = e.clientX - rect.left;
-        const py = e.clientY - rect.top;
-        const gs = UI.gridSize;
+          const visited = new Uint8Array(totalCells);
+          visited[getIdx(0, 0)] = 1;
 
-        // 計算網格中心點座標
-        const gx = Math.round((px - gs/2) / gs);
-        const gy = Math.round((py - gs/2) / gs);
+          const pathTurns = new Int8Array(totalSteps);
+          const validPaths = [];
+          const seenFootprints = new Set();
+          const quotas = [
+              [Math.floor((totalSteps + 4) / 2), Math.floor((totalSteps - 4) / 2)],
+              [Math.floor((totalSteps - 4) / 2), Math.floor((totalSteps + 4) / 2)]
+          ];
 
-        if (e.button === 0) {
-            this.togglePoint(this.targets, this.obstacles, gx, gy);
-        } else if (e.button === 2) {
-            this.togglePoint(this.obstacles, this.targets, gx, gy);
-        }
-        UI.render();
-    },
+          let isCapped = false;
+          // 完全拔除時間限制！計算將持續進行直到找到足夠的數量為止
+          const targetSearchLimit = Math.max(10, requiredCount * 2);
 
-    togglePoint(primary, secondary, x, y) {
-        const sIdx = secondary.findIndex(p => p.x === x && p.y === y);
-        if (sIdx !== -1) secondary.splice(sIdx, 1);
-        const pIdx = primary.findIndex(p => p.x === x && p.y === y);
-        if (pIdx !== -1) primary.splice(pIdx, 1);
-        else primary.push({x, y});
-    },
+          function estimateLowerBound(cx, cy, mask) {
+              if (mask === 0) return Math.max(Math.abs(cx), Math.abs(cy));
+              let minVal = 1e9;
+              for (let next = 0; next < K; next++) {
+                  if ((mask & (1 << next)) !== 0) {
+                      const cost = dist(cx, cy, ptsX[next + 1], ptsY[next + 1]) + getTspDist(mask & ~(1 << next), next);
+                      if (cost < minVal) minVal = cost;
+                  }
+              }
+              return minVal;
+          }
 
-    generate() {
-        const steps = parseInt(document.getElementById('sb-steps').value, 10);
-        const limit = parseInt(document.getElementById('sb-limit').value, 10);
-        
-        const t0 = performance.now();
-        this.results = this.runDFS(steps, limit);
-        const dt = (performance.now() - t0).toFixed(1);
+          function willViolateClosure(pTurns, lastTurn, step) {
+              if (totalSteps <= 4 || step < totalSteps - 3) return false;
+              const first0 = pTurns[0], first1 = pTurns[1], first2 = pTurns[2];
+              if (step === totalSteps - 1) {
+                  if (lastTurn === pTurns[step - 1] && lastTurn === pTurns[step - 2] && lastTurn === first0) return true;
+                  if (lastTurn === pTurns[step - 1] && lastTurn === first0 && lastTurn === first1) return true;
+                  if (lastTurn === first0 && lastTurn === first1 && lastTurn === first2) return true;
+              }
+              return false;
+          }
 
-        if (this.results.length > 0) {
-            UI.showStatus(`✅ 擬合出圖！已從隨機抽取 ${this.results.length} 組結果 (${dt}ms)`, true);
-            this.buildGallery();
-        } else {
-            UI.showStatus(`❌ 無法在 ${steps} 步內生成符合條件的路徑，請調整目標或步數。`, false);
-        }
-    },
+          // 核心迴圈：沒有任何 performance.now() 攔截，找到為止！
+          function dfs(step, x, y, cdir, leftRem, rightRem, unvisitedMask, startDir) {
+              if (isCapped) return;
+              if (validPaths.length >= targetSearchLimit) {
+                  isCapped = true;
+                  return;
+              }
 
-    runDFS(steps, limit) {
-        let paths = [];
-        let visited = new Set(['0,0']);
-        const dirs = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
-        const obsSet = new Set(this.obstacles.map(o => `${o.x},${o.y}`));
+              if (totalSteps - step < estimateLowerBound(x, y, unvisitedMask)) return;
 
-        const dfs = (x, y, step, path, lastDir) => {
-            if (paths.length >= limit) return;
-            if (step === steps) {
-                let hitAll = this.targets.every(t => path.some(p => p.x === t.x && p.y === t.y));
-                if (hitAll) paths.push([...path]);
-                return;
-            }
-            let shuffled = [...dirs].sort(() => Math.random() - 0.5);
-            for (let d of shuffled) {
-                let dirIdx = dirs.indexOf(d);
-                if (lastDir !== -1 && (dirIdx === lastDir || dirIdx === (lastDir ^ 2))) continue;
-                let nx = x + d.dx, ny = y + d.dy, k = `${nx},${ny}`;
-                if (!visited.has(k) && !obsSet.has(k)) {
-                    visited.add(k); path.push({x: nx, y: ny});
-                    dfs(nx, ny, step + 1, path, dirIdx);
-                    path.pop(); visited.delete(k);
-                }
-            }
-        };
-        dfs(0, 0, 0, [{x:0, y:0}], -1);
-        return paths;
-    },
+              if (step === totalSteps) {
+                  if (x === 0 && y === 0 && unvisitedMask === 0) {
+                      if (totalSteps > 4) {
+                          let c0 = pathTurns[0], c1 = pathTurns[1], c2 = pathTurns[2];
+                          let e0 = pathTurns[totalSteps - 3], e1 = pathTurns[totalSteps - 2], e2 = pathTurns[totalSteps - 1];
+                          if ((e0 === e1 && e1 === e2 && e2 === c0) ||
+                              (e1 === e2 && e2 === c0 && c0 === c1) ||
+                              (e2 === c0 && c0 === c1 && c1 === c2)) {
+                              return;
+                          }
+                      }
+                      
+                      let fpCx = 0, fpCy = 0, fpCdir = startDir;
+                      let edges = [];
+                      for (let i = 0; i < totalSteps; i++) {
+                          const turn = pathTurns[i];
+                          const turnIdx = turn === 1 ? 0 : 1;
+                          const transOffset = (fpCdir << 1) | turnIdx;
+                          const nx = fpCx + TRANS_DX[transOffset];
+                          const ny = fpCy + TRANS_DY[transOffset];
+                          fpCdir = TRANS_NDIR[transOffset];
+                          const p1 = (fpCx + 50) | ((fpCy + 50) << 7);
+                          const p2 = (nx + 50) | ((ny + 50) << 7);
+                          edges.push(p1 < p2 ? (p1 | (p2 << 14)) : (p2 | (p1 << 14)));
+                          fpCx = nx; fpCy = ny;
+                      }
+                      edges.sort((a, b) => a - b);
+                      const fp = edges.join(",");
 
-    buildGallery() {
-        UI.gallery.innerHTML = '';
-        this.currentIdx = 0;
-        this.results.forEach((path, idx) => {
-            const canvas = document.createElement('canvas');
-            canvas.className = `thumbnail ${idx === 0 ? 'selected' : ''}`;
-            canvas.width = 90; canvas.height = 90;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 2; ctx.beginPath();
-            path.forEach((p, i) => {
-                let px = 45 + p.x * 6, py = 45 + p.y * 6;
-                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-            });
-            ctx.stroke();
+                      if (!seenFootprints.has(fp)) {
+                          seenFootprints.add(fp);
+                          validPaths.push([startDir, Array.from(pathTurns)]);
+                      }
+                  }
+                  return;
+              }
 
-            canvas.addEventListener('click', () => {
-                document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('selected'));
-                canvas.classList.add('selected');
-                this.currentIdx = idx;
-                UI.render();
-            });
-            UI.gallery.appendChild(canvas);
-        });
-        UI.render();
-    },
+              let restricted = 0;
+              if (totalSteps > 4 && step >= 3) {
+                  const t1 = pathTurns[step - 1];
+                  if (t1 === pathTurns[step - 2] && t1 === pathTurns[step - 3]) {
+                      restricted = t1;
+                  }
+              }
 
-    draw(ctx, gs) {
-        const offX = gs / 2, offY = gs / 2;
+              for (let turnIdx = 0; turnIdx < 2; turnIdx++) {
+                  const turn = turnIdx === 0 ? 1 : -1;
+                  const rem = turn === 1 ? leftRem : rightRem;
+                  if (rem <= 0 || turn === restricted) continue;
 
-        if (this.currentIdx >= 0 && this.results[this.currentIdx]) {
-            const path = this.results[this.currentIdx];
-            ctx.beginPath(); ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 3; ctx.lineJoin = 'miter';
-            path.forEach((p, i) => {
-                let x = p.x * gs + offX, y = p.y * gs + offY;
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.stroke();
-        }
+                  if (willViolateClosure(pathTurns, turn, step)) continue;
 
-        ctx.font = '16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        this.targets.forEach(p => ctx.fillText('⭐', p.x * gs + offX, p.y * gs + offY));
-        this.obstacles.forEach(p => ctx.fillText('❌', p.x * gs + offX, p.y * gs + offY));
-    }
-};
+                  const transOffset = (cdir << 1) | turnIdx;
+                  const nx = x + TRANS_DX[transOffset];
+                  const ny = y + TRANS_DY[transOffset];
+                  if (Math.abs(nx) > R || Math.abs(ny) > R) continue;
 
-/**
- * 塗鴉擬合模式
- */
-const GenerativeController = {
-    isDrawing: false,
-    rawStroke: [],
-    finalPath: null,
+                  const nidx = getIdx(nx, ny);
+                  if (obstacleMap[nidx] === 1) continue;
 
-    reset() {
-        this.rawStroke = [];
-        this.finalPath = null;
-    },
+                  const isHomeStep = (step === totalSteps - 1 && nx === 0 && ny === 0);
+                  if (visited[nidx] === 1 && !isHomeStep) continue;
 
-    handleDown(e) {
-        if (this.finalPath) return;
-        this.isDrawing = true;
-        this.rawStroke = [];
-        this.addPoint(e);
-    },
-    handleMove(e) { if (this.isDrawing) this.addPoint(e); },
-    handleUp() { this.isDrawing = false; },
+                  const targetIdx = targetBitMap[nidx];
+                  let newMask = unvisitedMask;
+                  if (targetIdx !== -1) {
+                      const bit = 1 << targetIdx;
+                      if ((unvisitedMask & bit) !== 0) {
+                          newMask = unvisitedMask & ~bit;
+                      } else {
+                          continue;
+                      }
+                  }
 
-    addPoint(e) {
-        const rect = UI.canvas.getBoundingClientRect();
-        this.rawStroke.push({
-            x: (e.clientX - rect.left) / UI.gridSize,
-            y: (e.clientY - rect.top) / UI.gridSize
-        });
-        UI.render();
-    },
+                  if (!isHomeStep) visited[nidx] = 1;
+                  pathTurns[step] = turn;
 
-    generate() {
-        if (this.rawStroke.length < 5) return;
-        const steps = parseInt(document.getElementById('gen-steps').value, 10);
-        
-        const t0 = performance.now();
-        this.finalPath = this.solveOpenPath(this.rawStroke, steps);
-        const dt = (performance.now() - t0).toFixed(1);
+                  dfs(step + 1, nx, ny, TRANS_NDIR[transOffset],
+                      leftRem - (turn === 1 ? 1 : 0),
+                      rightRem - (turn === -1 ? 1 : 0),
+                      newMask, startDir);
 
-        if (this.finalPath) {
-            UI.showStatus(`✅ 擬合出圖！成功貼合筆跡，共 ${steps} 步 (${dt}ms)`, true);
-        } else {
-            UI.showStatus(`❌ 無法完全貼合筆跡，請嘗試畫得更流暢或調整步數 (${dt}ms)`, false);
-        }
-        UI.render();
-    },
+                  if (!isHomeStep) visited[nidx] = 0;
+              }
+          }
 
-    solveOpenPath(raw, steps) {
-        // 切比雪夫重取樣與彈性牽繩引擎
-        const dist = (p1, p2) => Math.max(Math.abs(p1.x - p2.x), Math.abs(p1.y - p2.y));
-        let len = 0;
-        for (let i = 1; i < raw.length; i++) len += dist(raw[i-1], raw[i]);
-        let scale = len === 0 ? 1 : steps / len;
-        let scaled = raw.map(p => ({ x: p.x * scale, y: p.y * scale }));
-        
-        let skel = [{ x: Math.round(scaled[0].x), y: Math.round(scaled[0].y) }];
-        let cur = scaled[0];
-        for (let i = 1; i < scaled.length; i++) {
-            let next = scaled[i], d = dist(cur, next);
-            while (d >= 1.0) {
-                let r = 1.0 / d;
-                cur = { x: cur.x + (next.x - cur.x)*r, y: cur.y + (next.y - cur.y)*r };
-                skel.push({ x: Math.round(cur.x), y: Math.round(cur.y) });
-                d = dist(cur, next);
-            }
-        }
-        skel.push({ x: Math.round(scaled[scaled.length-1].x), y: Math.round(scaled[scaled.length-1].y) });
+          const startDirs = [0, 1, 2, 3];
+          for (let i = startDirs.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [startDirs[i], startDirs[j]] = [startDirs[j], startDirs[i]];
+          }
 
-        const start = skel[0], end = skel[skel.length-1];
-        let best = null, vis = new Set([`${start.x},${start.y}`]);
-        const dirs = [{dx:1, dy:1}, {dx:1, dy:-1}, {dx:-1, dy:-1}, {dx:-1, dy:1}];
+          const initialMask = (1 << K) - 1;
+          for (let s = 0; s < 4; s++) {
+              const sDir = startDirs[s];
+              for (let q = 0; q < 2; q++) {
+                  visited.fill(0);
+                  visited[getIdx(0, 0)] = 1;
+                  dfs(0, 0, 0, sDir, quotas[q][0], quotas[q][1], initialMask, sDir);
+                  if (isCapped && validPaths.length > 0) break;
+              }
+              if (isCapped && validPaths.length > 0) break;
+          }
 
-        const dfs = (x, y, step, path, lastDir, iter) => {
-            if (best || iter.count++ > 60000) return;
-            if (step === steps) {
-                if (dist({x,y}, end) <= 3) best = [...path];
-                return;
-            }
-            let sStart = Math.max(0, step - 8), sEnd = Math.min(skel.length-1, step + 8);
-            let minDist = Infinity;
-            for (let i = sStart; i <= sEnd; i++) minDist = Math.min(minDist, dist({x,y}, skel[i]));
-            if (minDist > 3) return;
+          if (validPaths.length === 0) {
+              return { status: "error", nodes: [], msg: "❌ 無解：真的找不到符合條件的封閉迴路。" };
+          }
 
-            if (steps - step > 3 && dist({x,y}, end) <= 1) return;
+          for (let i = validPaths.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [validPaths[i], validPaths[j]] = [validPaths[j], validPaths[i]];
+          }
 
-            for (let i = 0; i < 4; i++) {
-                if (lastDir !== -1 && (i === (lastDir+1)%4 || i === (lastDir+3)%4) === false) continue;
-                let nx = x + dirs[i].dx, ny = y + dirs[i].dy, k = `${nx},${ny}`;
-                if (!vis.has(k)) {
-                    vis.add(k); path.push({x:nx, y:ny});
-                    dfs(nx, ny, step+1, path, i, iter);
-                    path.pop(); vis.delete(k);
-                }
-            }
-        };
-        dfs(start.x, start.y, 0, [start], -1, {count:0});
-        return best;
-    },
+          return { status: "success", data: validPaths };
+      }
 
-    draw(ctx, gs) {
-        const offX = gs / 2, offY = gs / 2;
+      self.onmessage = function(e) {
+          const t0 = performance.now();
+          const res = solveTwistyTurnyOptimized(e.data.steps, e.data.targets, e.data.obstacles, e.data.limit);
+          res.elapsed_ms = performance.now() - t0;
+          self.postMessage(res);
+      };
+  `;
+  
+  const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+  const workerUrl = URL.createObjectURL(workerBlob);
 
-        if (this.rawStroke.length > 0 && !this.finalPath) {
-            ctx.beginPath(); ctx.strokeStyle = '#adb5bd'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-            this.rawStroke.forEach((p, i) => {
-                let px = p.x * gs, py = p.y * gs;
-                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-            });
-            ctx.stroke();
-        }
+  /* =========================================================================
+     2. 繪圖輔助函數 (保留在主執行緒)
+  ========================================================================= */
+  const MAIN_TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
+  const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
+  const MAIN_TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
 
-        if (this.finalPath) {
-            ctx.beginPath(); ctx.strokeStyle = '#0d6efd'; ctx.lineWidth = 4; ctx.lineJoin = 'miter';
-            this.finalPath.forEach((p, i) => {
-                let px = p.x * gs + offX, py = p.y * gs + offY;
-                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-            });
-            ctx.stroke();
-        }
-    }
-};
+  function generateSvgPath(currDirStart, pathTurns) {
+      let svgD = "M 0 0";
+      let cx = 0, cy = 0, cdir = currDirStart;
+      for (let i = 0; i < pathTurns.length; i++) {
+          const turn = pathTurns[i];
+          const turnIdx = turn === 1 ? 0 : 1;
+          const transOffset = (cdir << 1) | turnIdx;
+          const nx = cx + MAIN_TRANS_DX[transOffset];
+          const ny = cy + MAIN_TRANS_DY[transOffset];
+          cdir = MAIN_TRANS_NDIR[transOffset];
+          const sweep = turn === 1 ? 1 : 0;
+          svgD += ` A 1 1 0 0 ${sweep} ${nx} ${ny}`;
+          cx = nx; cy = ny;
+      }
+      return svgD;
+  }
 
-// 綁定畫布互動
-UI.canvas.addEventListener('mousedown', e => {
-    if (UI.mode === 'sandbox') SandboxController.handleClick(e);
-    else GenerativeController.handleDown(e);
-});
-UI.canvas.addEventListener('mousemove', e => {
-    if (UI.mode === 'generative') GenerativeController.handleMove(e);
-});
-UI.canvas.addEventListener('mouseup', () => {
-    if (UI.mode === 'generative') GenerativeController.handleUp();
-});
+  function getBounds(startDir, pathTurns, targets, obstacles) {
+      let minX = 0, maxX = 0, minY = 0, maxY = 0;
+      let cx = 0, cy = 0, cdir = startDir;
+      for (let i = 0; i < pathTurns.length; i++) {
+          const turn = pathTurns[i];
+          const turnIdx = turn === 1 ? 0 : 1;
+          const transOffset = (cdir << 1) | turnIdx;
+          cx += MAIN_TRANS_DX[transOffset];
+          cy += MAIN_TRANS_DY[transOffset];
+          cdir = MAIN_TRANS_NDIR[transOffset];
+          if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+          if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+      }
+      for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
+          if (t[0] < minX) minX = t[0]; if (t[0] > maxX) maxX = t[0];
+          if (t[1] < minY) minY = t[1]; if (t[1] > maxY) maxY = t[1];
+      }
+      for (let i = 0; i < obstacles.length; i++) {
+          const o = obstacles[i];
+          if (o[0] < minX) minX = o[0]; if (o[0] > maxX) maxX = o[0];
+          if (o[1] < minY) minY = o[1]; if (o[1] > maxY) maxY = o[1];
+      }
+      return { minX, maxX, minY, maxY };
+  }
 
-// 按鈕綁定
-document.getElementById('sb-generateBtn').addEventListener('click', () => SandboxController.generate());
-document.getElementById('sb-clearBtn').addEventListener('click', () => { SandboxController.reset(); UI.hideStatus(); UI.render(); });
+  function renderSvgGrid(minX, maxX, minY, maxY, padding) {
+      let grid = '';
+      const startX = Math.floor(minX - padding);
+      const endX = Math.ceil(maxX + padding);
+      const startY = Math.floor(minY - padding);
+      const endY = Math.ceil(maxY + padding);
 
-document.getElementById('gen-generateBtn').addEventListener('click', () => GenerativeController.generate());
-document.getElementById('gen-clearBtn').addEventListener('click', () => { GenerativeController.reset(); UI.hideStatus(); UI.render(); });
+      for (let i = startY; i <= endY; i++) {
+          grid += `<line x1="${startX}" y1="${i}" x2="${endX}" y2="${i}" stroke="#e0e0e0" stroke-width="0.05"/>`;
+      }
+      for (let i = startX; i <= endX; i++) {
+          grid += `<line x1="${i}" y1="${startY}" x2="${i}" y2="${endY}" stroke="#e0e0e0" stroke-width="0.05"/>`;
+      }
+      return grid;
+  }
 
-UI.init();
+  function renderSvgFeatures(targets, obstacles) {
+      let feats = `<circle cx="0" cy="0" r="0.25" fill="#222"/>`;
+      targets.forEach(t => {
+          const cx = t[0], cy = t[1];
+          const starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
+          feats += `<polygon points="${starPoints}" fill="gold" stroke="#c69500" stroke-width="0.05" stroke-linejoin="round"/>`;
+      });
+      obstacles.forEach(o => {
+          feats += `<line x1="${o[0]-0.3}" y1="${o[1]-0.3}" x2="${o[0]+0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
+          feats += `<line x1="${o[0]+0.3}" y1="${o[1]-0.3}" x2="${o[0]-0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
+      });
+      return feats;
+  }
+
+  window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml) {
+      document.getElementById('modal-title').innerText = title;
+      document.querySelector('.modal-svg').setAttribute('viewBox', viewBox);
+      const combinedSvg = `
+          ${gridHtml}
+          <path d="${svgPathD}" fill="none" stroke="#007bff" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.4));"/>
+          ${featsHtml}
+      `;
+      document.getElementById('modal-svg-content').innerHTML = combinedSvg;
+      document.getElementById('modal-info').innerHTML = infoHtml;
+      document.getElementById('modal-overlay').style.display = 'flex';
+  };
+
+  window.closeModal = function() {
+      document.getElementById('modal-overlay').style.display = 'none';
+  };
+
+  /* =========================================================================
+     3. 畫面互動與 Worker 調度邏輯
+  ========================================================================= */
+  let cellStates = {};
+  let debounceTimer;
+  let activeWorker = null; // 追蹤目前正在運算的背景執行緒
+  const queryCache = new Map();
+
+  function clearAllErrors() {
+      document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
+  }
+
+  function toggleNode(x, y, el) {
+      if (x === 0 && y === 0) return;
+      const key = `${x},${y}`;
+      let st = cellStates[key] || 0;
+      st = (st + 1) % 3;
+      if (st === 0) delete cellStates[key]; else cellStates[key] = st;
+
+      el.className = 'node valid-parity'; el.innerHTML = '';
+      if (st === 1) { el.classList.add('target'); el.innerHTML = '⭐'; }
+      if (st === 2) { el.classList.add('obstacle'); el.innerHTML = '❌'; }
+      autoRun();
+  }
+
+  function initGrid(forceClear = false) {
+      if (forceClear) cellStates = {};
+      const steps = parseInt(document.getElementById('stepsInput').value, 10);
+      const R = Math.floor(steps / 2);
+      const board = document.getElementById('board');
+      const axisX = document.getElementById('axis-x-inner');
+      const axisY = document.getElementById('axis-y-inner');
+      const svgOverlay = document.getElementById('svg-overlay');
+
+      const boardSize = 2 * R + 1;
+      board.style.width = `calc(${boardSize} * var(--cell))`;
+      board.style.height = `calc(${boardSize} * var(--cell))`;
+      svgOverlay.setAttribute('viewBox', `-${R + 0.5} -${R + 0.5} ${boardSize} ${boardSize}`);
+      
+      document.getElementById('svg-path').setAttribute('d', '');
+      document.getElementById('results-container').innerHTML = '';
+      clearAllErrors();
+
+      Array.from(board.children).forEach(c => { if (c.id !== 'svg-overlay') board.removeChild(c); });
+      axisX.innerHTML = ''; axisY.innerHTML = '';
+
+      const pad = 15;
+      for (let x = -R; x <= R; x++) {
+          const lx = document.createElement('div'); lx.className = 'axis-label-x';
+          lx.style.left = `calc(${x + R + 0.5} * var(--cell) + ${pad}px)`; lx.innerText = x; axisX.appendChild(lx);
+      }
+      for (let y = R; y >= -R; y--) {
+          const ly = document.createElement('div'); ly.className = 'axis-label-y';
+          ly.style.top = `calc(${R - y + 0.5} * var(--cell) + ${pad}px)`; ly.innerText = y; axisY.appendChild(ly);
+      }
+
+      for (let y = R; y >= -R; y--) {
+          for (let x = -R; x <= R; x++) {
+              const node = document.createElement('div');
+              node.className = 'node';
+              node.dataset.coord = `${x},${y}`;
+              node.style.left = `calc(${x + R + 0.5} * var(--cell))`;
+              node.style.top = `calc(${R - y + 0.5} * var(--cell))`;
+
+              if ((Math.abs(x) + Math.abs(y)) % 2 !== 0) {
+                  node.classList.add('invalid-parity');
+              } else {
+                  node.classList.add('valid-parity');
+                  if (x === 0 && y === 0) {
+                      node.classList.add('center'); node.innerHTML = '🏠';
+                  } else {
+                      if (cellStates[`${x},${y}`] === 1) { node.classList.add('target'); node.innerHTML = '⭐'; }
+                      if (cellStates[`${x},${y}`] === 2) { node.classList.add('obstacle'); node.innerHTML = '❌'; }
+                      node.onclick = () => toggleNode(x, y, node);
+                  }
+              }
+              board.appendChild(node);
+          }
+      }
+  }
+
+  function handleWorkerResult(result, limit, targets, obstacles) {
+      const statusText = document.getElementById('statusText');
+      if (result.status === 'success') {
+          const validPaths = result.data;
+          const chosenPaths = validPaths.slice(0, limit);
+          const mainSvg = generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]);
+
+          statusText.innerText = `✅ 極速出圖！為您展示 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
+          statusText.style.color = "#28a745";
+          document.getElementById('svg-path').setAttribute('d', mainSvg);
+
+          const resDiv = document.getElementById('results-container');
+          resDiv.innerHTML = '';
+
+          const featsHtml = renderSvgFeatures(targets, obstacles);
+          const tStr = targets.length > 0 ? targets.map(t => `<span class="coord-tag">(${t[0]}, ${t[1]})</span>`).join('') : "無";
+          const oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : "無";
+          const infoHtml = `<div style="margin-bottom:8px;"><strong>⭐ 目標點：</strong><br>${tStr}</div><div><strong>❌ 障礙物：</strong><br>${oStr}</div>`;
+
+          chosenPaths.forEach((pathObj, idx) => {
+              const svg_d = generateSvgPath(pathObj[0], pathObj[1]);
+              const bounds = getBounds(pathObj[0], pathObj[1], targets, obstacles);
+              const P = 1.0;
+              const vX = bounds.minX - P, vY = bounds.minY - P;
+              const vW = bounds.maxX - bounds.minX + 2 * P, vH = bounds.maxY - bounds.minY + 2 * P;
+              const viewBox = `${vX} ${vY} ${vW} ${vH}`;
+              const gridHtml = renderSvgGrid(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, P);
+
+              const card = document.createElement('div'); card.className = 'thumb-card';
+              card.onclick = function() {
+                  openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml);
+              };
+              card.innerHTML = `
+                  <svg class="thumb-svg" viewBox="${viewBox}">
+                      ${gridHtml}
+                      <path d="${svg_d}" fill="none" stroke="#007bff" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+                      ${featsHtml}
+                  </svg>
+                  <div class="thumb-title">Result ${idx + 1}</div>
+              `;
+              resDiv.appendChild(card);
+          });
+      } else {
+          statusText.innerText = `${result.msg} (${result.elapsed_ms.toFixed(1)}ms)`;
+          statusText.style.color = "#dc3545";
+          if (result.nodes) {
+              result.nodes.forEach(coordStr => {
+                  const errNode = document.querySelector(`[data-coord="${coordStr}"]`);
+                  if (errNode) errNode.classList.add('error-pulse');
+              });
+          }
+      }
+  }
+
+  function autoRun() {
+      clearTimeout(debounceTimer);
+      
+      // 每次啟動前，強制作業清理：把舊的背景 Worker 殺死！
+      if (activeWorker) {
+          activeWorker.terminate();
+          activeWorker = null;
+      }
+
+      const statusText = document.getElementById('statusText');
+      statusText.innerHTML = "<span class='loader'></span> 深度搜尋中，請稍候... (隨時點擊網格即可中斷)";
+      statusText.style.color = "#007bff";
+
+      document.getElementById('svg-path').setAttribute('d', '');
+      document.getElementById('results-container').innerHTML = '';
+      clearAllErrors();
+
+      debounceTimer = setTimeout(() => {
+          const steps = parseInt(document.getElementById('stepsInput').value, 10);
+          const limit = parseInt(document.getElementById('limitInput').value, 10);
+          const targets = [], obstacles = [];
+          for (const k in cellStates) {
+              const parts = k.split(',');
+              if (cellStates[k] === 1) targets.push([parseInt(parts[0], 10), parseInt(parts[1], 10)]);
+              if (cellStates[k] === 2) obstacles.push([parseInt(parts[0], 10), parseInt(parts[1], 10)]);
+          }
+
+          const cacheKey = `${steps}_${limit}_${JSON.stringify(targets)}_${JSON.stringify(obstacles)}`;
+          
+          if (queryCache.has(cacheKey)) {
+              handleWorkerResult(queryCache.get(cacheKey), limit, targets, obstacles);
+          } else {
+              // 建立全新的背景 Worker 來接手無限期的搜尋任務
+              activeWorker = new Worker(workerUrl);
+              activeWorker.onmessage = function(e) {
+                  const result = e.data;
+                  if (result.status === 'success') {
+                      if (queryCache.size > 20) queryCache.delete(queryCache.keys().next().value);
+                      queryCache.set(cacheKey, result);
+                  }
+                  handleWorkerResult(result, limit, targets, obstacles);
+                  activeWorker = null; // 跑完就釋放
+              };
+              activeWorker.postMessage({ steps, targets, obstacles, limit });
+          }
+      }, 50);
+  }
+
+  initGrid(false);
+  autoRun();
 </script>
 </body>
 </html>
