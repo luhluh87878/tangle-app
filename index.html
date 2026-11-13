@@ -13,7 +13,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="google" content="notranslate">
-<title>Twisty Turny 極速尋路引擎 (Web Worker + 完美列印藍圖版)</title>
+<title>Twisty Turny 尋路引擎 (Web Worker + 列印藍圖版)</title>
 <style>
   :root { --cell: 40px; }
   body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
@@ -184,7 +184,7 @@
         👉 點 3 下：恢復空白<br>
     </div>
     <div style="color:#888; font-size: 11.5px; margin-bottom: 8px;">（註：灰色小叉叉 ✖ 代表幾何上永遠無法抵達的死區）</div>
-    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽一線到底的 <b>2N 方格紙帶展開圖</b>，一鍵列印或存成 PDF！</span></p>
+    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽方格紙帶展開圖</b>，一鍵列印或存成 PDF！</span></p>
   </div>
 
   <div class="slider-group">
@@ -225,10 +225,10 @@
         </div>
         <div id="modal-info"></div>
         
-        <div style="width: 100%; text-align: left; font-size: 13px; font-weight: bold; color: #444; margin-bottom: 5px;">📜 連續 2N 方格紙帶預覽 (可左右滑動)：</div>
+        <div style="width: 100%; text-align: left; font-size: 13px; font-weight: bold; color: #444; margin-bottom: 5px;">📜 方格紙帶預覽：</div>
         <div id="strip-preview-container"></div>
         
-        <button id="btn-print-blueprint" class="btn-export">🖨️ 進入列印 / 另存 PDF (自動分段)</button>
+        <button id="btn-print-blueprint" class="btn-export">🖨️ 進入列印 / 另存 PDF</button>
     </div>
 </div>
 
@@ -676,7 +676,7 @@
       svg += `<rect width="100%" height="100%" fill="#ffffff"/>`;
       
       svg += `<text x="${marginX}" y="35" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 分段列印紙帶藍圖 (${title} / 步數 N=${N})</text>`;
-      svg += `<text x="${marginX}" y="60" font-family="sans-serif" font-size="13" fill="#555">每行最高 15 格。每行末端附有梯形黏貼區，請直接將下一行的第 1 格黏貼於其上銜接。（※ 摺線方向已自動補償紙張正反翻面之奇偶性）</text>`;
+      svg += `<text x="${marginX}" y="60" font-family="sans-serif" font-size="13" fill="#555">每行最高 15 格。每行末端附有梯形黏貼區，請直接將下一行的第 1 格黏貼於其上銜接。</text>`;
 
       let currentGlobalIdx = 0;
       for (let r = 0; r < rowsCount; r++) {
