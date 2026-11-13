@@ -182,7 +182,7 @@
         👉 點 3 下：恢復空白<br>
     </div>
     <div style="color:#888; font-size: 11.5px; margin-bottom: 8px;">（註：灰色小叉叉 ✖ 代表幾何上永遠無法抵達的死區）</div>
-    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽方格紙帶展開圖</b>，一鍵列印或存成 PDF！</span></p>
+    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽一線到底的 <b>2N 方格紙帶展開圖</b>，一鍵列印或存成 PDF！</span></p>
   </div>
 
   <div class="slider-group">
@@ -223,7 +223,7 @@
         </div>
         <div id="modal-info"></div>
         
-        <div style="width: 100%; text-align: left; font-size: 13px; font-weight: bold; color: #444; margin-bottom: 5px;">📜 連續方格紙帶預覽 (可左右滑動)：</div>
+        <div style="width: 100%; text-align: left; font-size: 13px; font-weight: bold; color: #444; margin-bottom: 5px;">📜 連續 2N 方格紙帶預覽 (可左右滑動)：</div>
         <div id="strip-preview-container"></div>
         
         <button id="btn-print-blueprint" class="btn-export">🖨️ 進入列印 / 另存 PDF (自動分段)</button>
@@ -604,15 +604,15 @@
       return feats;
   }
 
-  // A. 螢幕預覽用：一線到底無縫連續 SVG
+  // A. 螢幕預覽用：一線到底無縫連續 SVG (引入奇偶翻面法則)
   function generatePreviewStripSvg(pathTurns) {
       const N = pathTurns.length;
       const totalSquares = 2 * N;
       const cellSize = 50; 
-      const marginX = 2; // 只保留極小邊距，節省滑動空間
+      const marginX = 2; 
       const marginY = 5;
       
-      const svgWidth = marginX * 2 + totalSquares * cellSize + 25; // 25 給黏貼邊
+      const svgWidth = marginX * 2 + totalSquares * cellSize + 25; 
       const svgHeight = marginY * 2 + cellSize;
 
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="height: 100%; width: auto;">`;
@@ -626,16 +626,25 @@
               svg += `<text x="${x + 4}" y="${y + 16}" font-family="monospace" font-size="12" fill="#888">#${stepNum}</text>`;
               svg += `<circle cx="${x + cellSize/2}" cy="${y + cellSize/2}" r="2" fill="#aaa"/>`;
           } else { // 偶數格: 轉向格
-              const isLeft = (pathTurns[Math.floor(i / 2)] === 1);
+              const turnIdx = Math.floor(i / 2);
+              const isLeft = (pathTurns[turnIdx] === 1);
+              const isEvenStep = (turnIdx % 2 === 0); // 判斷是否為偶數步 (紙張正面)
+              
               const bgFill = isLeft ? "#e7f1ff" : "#ffeef0";
               const strokeCol = isLeft ? "#0066cc" : "#dc3545";
+              const labelText = isLeft ? "L" : "R";
+              
               svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
-              if (isLeft) {
-                  svg += `<line x1="${x}" y1="${y + cellSize}" x2="${x + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
-                  svg += `<text x="${x + 6}" y="${y + 18}" font-family="sans-serif" font-size="15" font-weight="bold" fill="${strokeCol}">L</text>`;
-              } else {
+              
+              // 奇偶性翻面判定邏輯
+              if ((isLeft && isEvenStep) || (!isLeft && !isEvenStep)) {
+                  // 畫 \ (左上至右下)
                   svg += `<line x1="${x}" y1="${y}" x2="${x + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
-                  svg += `<text x="${x + cellSize - 18}" y="${y + 18}" font-family="sans-serif" font-size="15" font-weight="bold" fill="${strokeCol}">R</text>`;
+                  svg += `<text x="${x + cellSize - 18}" y="${y + 18}" font-family="sans-serif" font-size="15" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
+              } else {
+                  // 畫 / (左下至右上)
+                  svg += `<line x1="${x}" y1="${y + cellSize}" x2="${x + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
+                  svg += `<text x="${x + 6}" y="${y + 18}" font-family="sans-serif" font-size="15" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
               }
           }
           if (i === totalSquares - 1) { // 最後黏貼邊
@@ -648,7 +657,7 @@
       return svg;
   }
 
-  // B. 列印用：分段換行 SVG (每行 15 格實體格，無行首對齊格)
+  // B. 列印用：分段換行 SVG (每行 15 格實體格，無行首對齊格，引入奇偶翻面法則)
   function generatePrintStripSvg(pathTurns, title) {
       const N = pathTurns.length;
       const totalSquares = 2 * N;
@@ -657,10 +666,7 @@
       
       const marginX = 40, marginY = 80, rowGap = 35;
       
-      // 計算總行數
       const rowsCount = Math.ceil(totalSquares / maxCols);
-      
-      // 畫布寬度 = 左邊距 + 15格寬度 + 黏貼邊 + 右邊距
       const svgWidth = marginX * 2 + maxCols * cellSize + 50; 
       const svgHeight = marginY * 2 + rowsCount * (cellSize + rowGap);
 
@@ -668,7 +674,7 @@
       svg += `<rect width="100%" height="100%" fill="#ffffff"/>`;
       
       svg += `<text x="${marginX}" y="35" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 分段列印紙帶藍圖 (${title} / 步數 N=${N})</text>`;
-      svg += `<text x="${marginX}" y="60" font-family="sans-serif" font-size="13" fill="#555">每行末端附有梯形黏貼區，請直接將下一行的第 1 格黏貼於其上銜接。</text>`;
+      svg += `<text x="${marginX}" y="60" font-family="sans-serif" font-size="13" fill="#555">每行最高 15 格。每行末端附有梯形黏貼區，請直接將下一行的第 1 格黏貼於其上銜接。（※ 摺線方向已自動補償紙張正反翻面之奇偶性）</text>`;
 
       let currentGlobalIdx = 0;
       for (let r = 0; r < rowsCount; r++) {
@@ -696,25 +702,27 @@
                   svg += `<text x="${currentX + 4}" y="${y + 14}" font-family="monospace" font-size="11" fill="#888">#${stepNum}</text>`;
                   svg += `<circle cx="${currentX + cellSize/2}" cy="${y + cellSize/2}" r="2" fill="#aaa"/>`;
               } else {
-                  const isLeft = (pathTurns[Math.floor(logicalIdx / 2)] === 1);
+                  const turnIdx = Math.floor(logicalIdx / 2);
+                  const isLeft = (pathTurns[turnIdx] === 1);
+                  const isEvenStep = (turnIdx % 2 === 0);
                   const labelText = isLeft ? "L" : "R";
-                  if (isLeft) {
-                      svg += `<line x1="${currentX}" y1="${y + cellSize}" x2="${currentX + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
-                      svg += `<text x="${currentX + 6}" y="${y + 16}" font-family="sans-serif" font-size="14" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
-                  } else {
+                  
+                  // 奇偶性翻面判定邏輯
+                  if ((isLeft && isEvenStep) || (!isLeft && !isEvenStep)) {
                       svg += `<line x1="${currentX}" y1="${y}" x2="${currentX + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
                       svg += `<text x="${currentX + cellSize - 18}" y="${y + 16}" font-family="sans-serif" font-size="14" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
+                  } else {
+                      svg += `<line x1="${currentX}" y1="${y + cellSize}" x2="${currentX + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
+                      svg += `<text x="${currentX + 6}" y="${y + 16}" font-family="sans-serif" font-size="14" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
                   }
               }
               
-              // 若是該行的最後一個格，且不是整條的最後一格，加上一般黏貼邊
               if (c === rowCellsCount - 1 && logicalIdx < totalSquares - 1) {
                   const tx = currentX + cellSize;
                   const tabW = 20;
                   svg += `<polygon points="${tx},${y} ${tx + tabW},${y + 8} ${tx + tabW},${y + cellSize - 8} ${tx},${y + cellSize}" fill="#e9ecef" stroke="#222" stroke-width="1.5" stroke-dasharray="3,2"/>`;
                   svg += `<text x="${tx + 4}" y="${y + cellSize/2 + 4}" font-family="sans-serif" font-size="10" fill="#555">塗膠水</text>`;
               }
-              // 全圖最後一格 (閉合處黏貼邊)
               if (c === rowCellsCount - 1 && logicalIdx === totalSquares - 1) {
                   const tx = currentX + cellSize;
                   const tabW = 20;
@@ -741,10 +749,8 @@
       document.getElementById('modal-svg-content').innerHTML = combinedSvg;
       document.getElementById('modal-info').innerHTML = infoHtml;
       
-      // 生成一線到底紙帶並嵌入螢幕預覽區 (可水平滑動)
       document.getElementById('strip-preview-container').innerHTML = generatePreviewStripSvg(pathTurns);
       
-      // 綁定「一鍵列印」按鈕，生成分段列印版藍圖
       const btnPrint = document.getElementById('btn-print-blueprint');
       btnPrint.onclick = function() {
           const printSvgString = generatePrintStripSvg(pathTurns, title);
