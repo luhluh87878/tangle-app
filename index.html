@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="google" content="notranslate">
-<title>Twisty Turny 極速尋路引擎 (Web Worker 無限制運算版)</title>
+<title>Twisty Turny 極速尋路引擎 (Web Worker + 2N 摺紙藍圖版)</title>
 <style>
   :root { --cell: 40px; }
   body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
@@ -114,16 +114,24 @@
       box-shadow: 0 10px 25px rgba(0,0,0,0.2);
   }
   #modal-svg-container {
-      width: 80vw; height: 50vh; max-width: 450px; max-height: 450px;
-      background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px;
+      width: 80vw; height: 42vh; max-width: 420px; max-height: 420px;
+      background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px;
   }
   .modal-svg { width: 100%; height: 100%; transform: scaleY(-1); }
   #modal-close {
       position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; cursor: pointer; color: #888; line-height: 1;
   }
   #modal-close:hover { color: #333; }
-  #modal-info { font-size: 14px; color: #444; text-align: left; width: 100%; line-height: 1.6; overflow-y: auto;}
-  .coord-tag { display: inline-block; background: #e9ecef; padding: 2px 8px; border-radius: 12px; margin: 2px; font-family: monospace; font-size: 13px; color: #333; border: 1px solid #ccc;}
+  #modal-info { font-size: 13.5px; color: #444; text-align: left; width: 100%; line-height: 1.5; overflow-y: auto; max-height: 22vh; margin-bottom: 12px;}
+  .coord-tag { display: inline-block; background: #e9ecef; padding: 2px 8px; border-radius: 12px; margin: 2px; font-family: monospace; font-size: 12.5px; color: #333; border: 1px solid #ccc;}
+  
+  .btn-export {
+      padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;
+      background: #198754; color: #fff; width: 100%; font-size: 14.5px;
+      box-shadow: 0 2px 5px rgba(25,135,84,0.3); transition: background 0.2s, transform 0.1s;
+  }
+  .btn-export:hover { background: #157347; }
+  .btn-export:active { transform: scale(0.98); }
 </style>
 </head>
 <body class="notranslate">
@@ -139,7 +147,7 @@
         👉 點 3 下：恢復空白<br>
     </div>
     <div style="color:#888; font-size: 11.5px; margin-bottom: 8px;">（註：灰色小叉叉 ✖ 代表幾何上永遠無法抵達的死區）</div>
-    <p>出圖：<span style="font-weight: normal;">背景無限制運算，直到達成數量要求！期間畫面不卡頓，若想放棄，隨時點擊網格或拉動滑桿即可中斷重來。</span></p>
+    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點擊下方縮圖放大檢視，可一鍵匯出 <b>2N 方格紙帶展開圖</b>！</span></p>
   </div>
 
   <div class="slider-group">
@@ -179,13 +187,13 @@
             </svg>
         </div>
         <div id="modal-info"></div>
+        <button id="btn-export-blueprint" class="btn-export">🖨️ 匯出 2N 方格摺紙藍圖 (SVG)</button>
     </div>
 </div>
 
 <script>
   /* =========================================================================
-     1. 定義 Web Worker 背景腳本 (將運算邏輯打包，丟進背景執行)
-     完全拔除時間限制，直到找到目標數量為止。
+     1. 定義 Web Worker 背景腳本
   ========================================================================= */
   const workerCode = `
       const TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
@@ -322,7 +330,6 @@
           ];
 
           let isCapped = false;
-          // 完全拔除時間限制！計算將持續進行直到找到足夠的數量為止
           const targetSearchLimit = Math.max(10, requiredCount * 2);
 
           function estimateLowerBound(cx, cy, mask) {
@@ -348,7 +355,6 @@
               return false;
           }
 
-          // 核心迴圈：沒有任何 performance.now() 攔截，找到為止！
           function dfs(step, x, y, cdir, leftRem, rightRem, unvisitedMask, startDir) {
               if (isCapped) return;
               if (validPaths.length >= targetSearchLimit) {
@@ -486,7 +492,7 @@
   const workerUrl = URL.createObjectURL(workerBlob);
 
   /* =========================================================================
-     2. 繪圖輔助函數 (保留在主執行緒)
+     2. 繪圖與 2N 方格摺紙藍圖生成器
   ========================================================================= */
   const MAIN_TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
   const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
@@ -565,7 +571,96 @@
       return feats;
   }
 
-  window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml) {
+  // 生成 2N 方格紙帶展開圖並觸發下載
+  function downloadOrigamiBlueprint(pathTurns, title) {
+      const N = pathTurns.length;
+      const totalSquares = 2 * N;
+      const cellSize = 45; // 每個方格在 SVG 中的邊長
+      const colsPerRow = 10; // 每列 10 格 (即 5 個轉彎步驟)，方便 A4 紙張直式排版
+      const rows = Math.ceil(totalSquares / colsPerRow);
+      
+      const marginX = 35;
+      const marginY = 75;
+      const rowGap = 32;
+      
+      const svgWidth = marginX * 2 + colsPerRow * cellSize + 30;
+      const svgHeight = marginY + rows * (cellSize + rowGap) + 40;
+
+      const seqStr = pathTurns.map(t => t === 1 ? 'L' : 'R').join(' - ');
+
+      let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">`;
+      svgContent += `<rect width="100%" height="100%" fill="#ffffff"/>`;
+      
+      // 標題與圖例說明
+      svgContent += `<text x="${marginX}" y="30" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 2N 方格紙帶摺紙藍圖 (${title} / 總步數 N=${N}, 共 ${totalSquares} 格)</text>`;
+      svgContent += `<text x="${marginX}" y="52" font-family="sans-serif" font-size="12" fill="#555">規則：奇數格為間隔連接格；偶數格為 45° 轉向摺痕（藍色 L = 左轉 / 紅色 R = 右轉）。列印後沿外框實線剪下，頭尾黏合。</text>`;
+
+      for (let i = 0; i < totalSquares; i++) {
+          const r = Math.floor(i / colsPerRow);
+          const c = i % colsPerRow;
+          const x = marginX + c * cellSize;
+          const y = marginY + r * (cellSize + rowGap);
+
+          const isTurnCell = (i % 2 === 1); // 偶數格 (0-indexed 的奇數索引) 放轉彎序列
+
+          if (!isTurnCell) {
+              // 奇數格：連接間隔格
+              const stepNum = Math.floor(i / 2) + 1;
+              svgContent += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="#f8f9fa" stroke="#222" stroke-width="1.5"/>`;
+              svgContent += `<text x="${x + 5}" y="${y + 13}" font-family="monospace" font-size="10" fill="#888">#${stepNum}</text>`;
+              svgContent += `<circle cx="${x + cellSize/2}" cy="${y + cellSize/2}" r="2" fill="#ccc"/>`;
+          } else {
+              // 偶數格：轉彎序列格
+              const turnIdx = Math.floor(i / 2);
+              const turn = pathTurns[turnIdx];
+              const isLeft = (turn === 1);
+
+              const bgFill = isLeft ? "#e7f1ff" : "#ffeef0";
+              const strokeCol = isLeft ? "#0066cc" : "#dc3545";
+              const labelText = isLeft ? "L" : "R";
+
+              svgContent += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
+
+              // 繪製 45 度對角線摺痕 (虛線)
+              if (isLeft) {
+                  // 左轉：左下到右上對角線 (/)
+                  svgContent += `<line x1="${x}" y1="${y + cellSize}" x2="${x + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
+                  svgContent += `<text x="${x + 7}" y="${y + 16}" font-family="sans-serif" font-size="13" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
+              } else {
+                  // 右轉：左上到右下對角線 (\)
+                  svgContent += `<line x1="${x}" y1="${y}" x2="${x + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
+                  svgContent += `<text x="${x + cellSize - 16}" y="${y + 16}" font-family="sans-serif" font-size="13" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
+              }
+          }
+
+          // 若是最後一格，加上頭尾閉合「黏貼邊 (Glue Tab)」
+          if (i === totalSquares - 1) {
+              const tx = x + cellSize;
+              const ty = y;
+              const tabW = 16;
+              svgContent += `<polygon points="${tx},${ty} ${tx + tabW},${ty + 7} ${tx + tabW},${ty + cellSize - 7} ${tx},${ty + cellSize}" fill="#e9ecef" stroke="#222" stroke-width="1.2" stroke-dasharray="3,2"/>`;
+              svgContent += `<text x="${tx + 3}" y="${ty + cellSize/2 + 3}" font-family="sans-serif" font-size="9" fill="#555">黏貼</text>`;
+          }
+      }
+
+      // 底部完整序列文字參考
+      const footerY = marginY + rows * (cellSize + rowGap) + 15;
+      svgContent += `<text x="${marginX}" y="${footerY}" font-family="monospace" font-size="11" fill="#333">完整轉向序列: [${seqStr}]</text>`;
+      svgContent += `</svg>`;
+
+      // 觸發瀏覽器下載
+      const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `TwistyTurny_2N_Blueprint_N${N}_${title.replace(/\s+/g, '')}.svg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+  }
+
+  window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml, pathTurns) {
       document.getElementById('modal-title').innerText = title;
       document.querySelector('.modal-svg').setAttribute('viewBox', viewBox);
       const combinedSvg = `
@@ -575,6 +670,13 @@
       `;
       document.getElementById('modal-svg-content').innerHTML = combinedSvg;
       document.getElementById('modal-info').innerHTML = infoHtml;
+      
+      // 綁定匯出藍圖按鈕事件
+      const btnExport = document.getElementById('btn-export-blueprint');
+      btnExport.onclick = function() {
+          downloadOrigamiBlueprint(pathTurns, title);
+      };
+
       document.getElementById('modal-overlay').style.display = 'flex';
   };
 
@@ -587,7 +689,7 @@
   ========================================================================= */
   let cellStates = {};
   let debounceTimer;
-  let activeWorker = null; // 追蹤目前正在運算的背景執行緒
+  let activeWorker = null;
   const queryCache = new Map();
 
   function clearAllErrors() {
@@ -680,20 +782,27 @@
           const featsHtml = renderSvgFeatures(targets, obstacles);
           const tStr = targets.length > 0 ? targets.map(t => `<span class="coord-tag">(${t[0]}, ${t[1]})</span>`).join('') : "無";
           const oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : "無";
-          const infoHtml = `<div style="margin-bottom:8px;"><strong>⭐ 目標點：</strong><br>${tStr}</div><div><strong>❌ 障礙物：</strong><br>${oStr}</div>`;
 
           chosenPaths.forEach((pathObj, idx) => {
-              const svg_d = generateSvgPath(pathObj[0], pathObj[1]);
-              const bounds = getBounds(pathObj[0], pathObj[1], targets, obstacles);
+              const pathTurns = pathObj[1];
+              const svg_d = generateSvgPath(pathObj[0], pathTurns);
+              const bounds = getBounds(pathObj[0], pathTurns, targets, obstacles);
               const P = 1.0;
               const vX = bounds.minX - P, vY = bounds.minY - P;
               const vW = bounds.maxX - bounds.minX + 2 * P, vH = bounds.maxY - bounds.minY + 2 * P;
               const viewBox = `${vX} ${vY} ${vW} ${vH}`;
               const gridHtml = renderSvgGrid(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, P);
 
+              const seqPreview = pathTurns.map(t => t === 1 ? 'L' : 'R').join('');
+              const infoHtml = `
+                  <div style="margin-bottom:6px;"><strong>⭐ 目標點：</strong>${tStr}</div>
+                  <div style="margin-bottom:6px;"><strong>❌ 障礙物：</strong>${oStr}</div>
+                  <div><strong>🧬 轉向序列 (N=${pathTurns.length})：</strong><br><span style="font-family:monospace; font-size:12px; word-break:break-all; color:#0056b3;">${seqPreview}</span></div>
+              `;
+
               const card = document.createElement('div'); card.className = 'thumb-card';
               card.onclick = function() {
-                  openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml);
+                  openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml, pathTurns);
               };
               card.innerHTML = `
                   <svg class="thumb-svg" viewBox="${viewBox}">
@@ -720,7 +829,6 @@
   function autoRun() {
       clearTimeout(debounceTimer);
       
-      // 每次啟動前，強制作業清理：把舊的背景 Worker 殺死！
       if (activeWorker) {
           activeWorker.terminate();
           activeWorker = null;
@@ -749,7 +857,6 @@
           if (queryCache.has(cacheKey)) {
               handleWorkerResult(queryCache.get(cacheKey), limit, targets, obstacles);
           } else {
-              // 建立全新的背景 Worker 來接手無限期的搜尋任務
               activeWorker = new Worker(workerUrl);
               activeWorker.onmessage = function(e) {
                   const result = e.data;
@@ -758,7 +865,7 @@
                       queryCache.set(cacheKey, result);
                   }
                   handleWorkerResult(result, limit, targets, obstacles);
-                  activeWorker = null; // 跑完就釋放
+                  activeWorker = null;
               };
               activeWorker.postMessage({ steps, targets, obstacles, limit });
           }
