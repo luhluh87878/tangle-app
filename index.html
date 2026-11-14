@@ -409,7 +409,6 @@
       return { minX, maxX, minY, maxY };
   }
 
-  // 共用的畫摺痕函數 (修正正反翻面法則)
   function renderBlueprintCell(x, y, logicalIdx, pathTurns, cellSize) {
       const isTurnCell = (logicalIdx % 2 === 1);
       let svg = "";
@@ -425,8 +424,6 @@
           const strokeCol = isLeft ? "#0066cc" : "#dc3545";
           
           svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
-          
-          // 修正版奇偶法則：(isLeft && isEvenStep) -> /，(isLeft && !isEvenStep) -> \
           const isBackslash = (!isLeft && isEvenStep) || (isLeft && !isEvenStep);
           if (isBackslash) {
               svg += `<line x1="${x}" y1="${y}" x2="${x + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
@@ -488,11 +485,11 @@
   ========================================================================= */
   let scene, camera, renderer, controls;
   let animHinges = [], isAnimPlaying = false, totalFolds = 0, currentPathTurns = null;
-  let finalBoundingBox = new THREE.Box3(); // 用於動畫結束時回正攝影機
+  let finalBoundingBox = new THREE.Box3(); 
 
   function init3DScene() {
       const container = document.getElementById('modal-right');
-      if (renderer) return; // 已經初始化過了
+      if (renderer) return; 
       
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x222222);
@@ -506,14 +503,12 @@
       controls.enableDamping = true;
       controls.dampingFactor = 0.1;
       
-      // 添加環境光
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
       scene.add(ambientLight);
       const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
       dirLight.position.set(50, 200, 100);
       scene.add(dirLight);
 
-      // 監聽視窗變形
       window.addEventListener('resize', () => {
           if (!document.getElementById('modal-overlay').style.display || document.getElementById('modal-overlay').style.display === 'none') return;
           camera.aspect = container.clientWidth / container.clientHeight;
@@ -521,9 +516,7 @@
           renderer.setSize(container.clientWidth, container.clientHeight);
       });
 
-      // 監聽使用者手動干預 (停止自動運鏡)
       controls.addEventListener('start', () => { isAnimPlaying = false; syncPlayButtonUI(); });
-
       requestAnimationFrame(render3DLoop);
   }
 
@@ -549,26 +542,22 @@
 
   function createDoubleSidedTriangle(p1, p2, p3, baseZOffset, frontTex) {
       const group = new THREE.Group();
-      
       const fGeom = new THREE.BufferGeometry();
       fGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p1, ...p2, ...p3]), 3));
-      // UV 對齊 (假設 P1,P2,P3 是來自正方形 [0,1]x[0,1])
       const uvs = new Float32Array([ p1[0]/40, p1[1]/40+0.5, p2[0]/40, p2[1]/40+0.5, p3[0]/40, p3[1]/40+0.5 ]);
       fGeom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
       fGeom.computeVertexNormals();
 
       const bGeom = new THREE.BufferGeometry();
-      bGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p1, ...p3, ...p2]), 3)); // 翻轉法線
+      bGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p1, ...p3, ...p2]), 3)); 
       bGeom.computeVertexNormals();
 
-      // Polygon Offset 防止重疊閃爍 (越後面的格子 zOffset 越小，畫在越上層)
       const fMat = new THREE.MeshLambertMaterial({ map: frontTex, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: baseZOffset });
       const bMat = new THREE.MeshLambertMaterial({ color: 0x90a4ae, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: baseZOffset + 0.1 });
       
       group.add(new THREE.Mesh(fGeom, fMat));
       group.add(new THREE.Mesh(bGeom, bMat));
 
-      // 黑框邊線
       const edges = new THREE.EdgesGeometry(fGeom);
       group.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 })));
       
@@ -576,7 +565,6 @@
   }
 
   function build3DStrip(pathTurns) {
-      // 清空舊場景中的紙帶
       const oldStrip = scene.getObjectByName('stripRoot');
       if (oldStrip) scene.remove(oldStrip);
 
@@ -589,15 +577,13 @@
       let currentParent = stripRoot;
 
       for (let i = 0; i < pathTurns.length * 2; i++) {
-          const zOffset = -i * 5; // 給顯示卡用的層級深度 (數值越小畫在越上面)
+          const zOffset = -i * 5; 
           
           if (i % 2 === 0) {
-              // 緩衝格 (Even)
               const stepNum = Math.floor(i / 2) + 1;
               const tex = createPaperTexture('#' + stepNum, false, false, '#888');
               const cellGroup = new THREE.Group();
               
-              // 用兩個三角形拼成一個正方形 (TL, BL, TR) + (BR, TR, BL)
               const tri1 = createDoubleSidedTriangle([0, L/2, 0], [0, -L/2, 0], [L, L/2, 0], zOffset, tex);
               const tri2 = createDoubleSidedTriangle([L, -L/2, 0], [L, L/2, 0], [0, -L/2, 0], zOffset, tex);
               cellGroup.add(tri1, tri2);
@@ -609,7 +595,6 @@
               currentParent.add(cellGroup);
               currentParent = nextAnchor;
           } else {
-              // 轉向格 (Odd)
               const turnIdx = Math.floor(i / 2);
               const isLeft = (pathTurns[turnIdx] === 1);
               const isEvenStep = (turnIdx % 2 === 0);
@@ -621,25 +606,21 @@
               const nextAnchor = new THREE.Group();
 
               if (isBackslash) {
-                  // \ 對角線 (TL to BR)
                   const tri1 = createDoubleSidedTriangle([0, L/2, 0], [0, -L/2, 0], [L, -L/2, 0], zOffset, tex);
-                  hinge.position.set(0, L/2, 0); // Hinge in local cell space
+                  hinge.position.set(0, L/2, 0); 
                   hinge.userData = { axis: new THREE.Vector3(1, -1, 0).normalize() };
                   
-                  // Tri2 相對於 Hinge(TL) 的座標偏移
                   const tri2 = createDoubleSidedTriangle([0, 0, 0], [L, -L, 0], [L, 0, 0], zOffset, tex);
                   hinge.add(tri2);
-                  nextAnchor.position.set(L, -L/2, 0); // Next anchor relative to Hinge
+                  nextAnchor.position.set(L, -L/2, 0); 
               } else {
-                  // / 對角線 (BL to TR)
                   const tri1 = createDoubleSidedTriangle([0, -L/2, 0], [L, L/2, 0], [0, L/2, 0], zOffset, tex);
-                  hinge.position.set(0, -L/2, 0); // Hinge in local cell space
+                  hinge.position.set(0, -L/2, 0); 
                   hinge.userData = { axis: new THREE.Vector3(1, 1, 0).normalize() };
                   
-                  // Tri2 相對於 Hinge(BL) 的座標偏移
                   const tri2 = createDoubleSidedTriangle([0, 0, 0], [L, 0, 0], [L, L, 0], zOffset, tex);
                   hinge.add(tri2);
-                  nextAnchor.position.set(L, L/2, 0); // Next anchor relative to Hinge
+                  nextAnchor.position.set(L, L/2, 0); 
               }
 
               turnGroup.add(tri1);
@@ -655,14 +636,9 @@
   }
 
   function applyFolds(progress) {
-      // 進度範圍：0 ~ totalFolds
       for (let i = 0; i < totalFolds; i++) {
-          // 每一步佔據 1.0 的進度，利用 easeInOut 曲線讓摺疊看起來更有物理重量感
           let foldAmount = Math.max(0, Math.min(1, progress - i));
-          // 加上一點緩動效果 (Easing)
           foldAmount = foldAmount < 0.5 ? 2 * foldAmount * foldAmount : -1 + (4 - 2 * foldAmount) * foldAmount;
-          
-          // 精準 180 度 (Math.PI) 以保證頭尾接合
           const angle = foldAmount * Math.PI; 
           animHinges[i].setRotationFromAxisAngle(animHinges[i].userData.axis, angle);
       }
@@ -671,14 +647,13 @@
   function render3DLoop() {
       if (isAnimPlaying) {
           const slider = document.getElementById('anim-slider');
-          slider.value = Number(slider.value) + 0.025; // 播放速度
+          slider.value = Number(slider.value) + 0.025; 
           
           if (slider.value >= totalFolds) {
               slider.value = totalFolds;
               isAnimPlaying = false;
               syncPlayButtonUI();
               
-              // 摺疊結束，將鏡頭移回正上方俯視全局
               if (finalBoundingBox && !finalBoundingBox.isEmpty()) {
                   const center = new THREE.Vector3();
                   finalBoundingBox.getCenter(center);
@@ -686,12 +661,10 @@
                   finalBoundingBox.getSize(size);
                   const maxDim = Math.max(size.x, size.y, size.z);
                   
-                  // 平滑過渡攝影機與焦點
                   camera.position.lerp(new THREE.Vector3(center.x, center.y, maxDim * 1.5 + 50), 0.05);
                   controls.target.lerp(center, 0.05);
               }
           } else {
-              // 摺疊途中，焦點動態跟隨正在摺疊的鉸鏈
               const activeIdx = Math.floor(slider.value);
               if (animHinges[activeIdx]) {
                   const targetPos = new THREE.Vector3();
@@ -701,7 +674,6 @@
           }
       }
       
-      // 手動拖曳滑桿時即時更新
       if (document.getElementById('anim-slider')) {
           applyFolds(Number(document.getElementById('anim-slider').value));
       }
@@ -711,9 +683,7 @@
       requestAnimationFrame(render3DLoop);
   }
 
-  function syncPlayButtonUI() {
-      document.getElementById('btn-play').innerText = isAnimPlaying ? "⏸" : "▶";
-  }
+  function syncPlayButtonUI() { document.getElementById('btn-play').innerText = isAnimPlaying ? "⏸" : "▶"; }
 
   /* =========================================================================
      4. UI 事件與調度邏輯
@@ -780,6 +750,8 @@
           const chosenPaths = result.data.slice(0, limit);
           statusText.innerText = `✅ 找到 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
           statusText.style.color = "#28a745";
+          
+          // 修復：呼叫 generateSvgPath 繪製主畫面的藍色曲線
           document.getElementById('svg-path').setAttribute('d', generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]));
 
           const resDiv = document.getElementById('results-container');
@@ -845,7 +817,6 @@
       document.getElementById('modal-svg-content').innerHTML = `${gridHtml}<path d="${svgPathD}" fill="none" stroke="#007bff" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.4));"/>${featsHtml}`;
       document.getElementById('strip-preview-container').innerHTML = generatePreviewStripSvg(pathTurns);
       
-      // 處理列印事件 (結合 GA4 追蹤)
       document.getElementById('btn-print-blueprint').onclick = function() {
           if (typeof gtag === 'function') gtag('event', 'export_blueprint', { 'steps': pathTurns.length });
           document.getElementById('print-area').innerHTML = generatePrintStripSvg(pathTurns, title);
@@ -854,19 +825,16 @@
 
       document.getElementById('modal-overlay').style.display = 'flex';
       
-      // 初始化 3D 摺紙
       init3DScene();
       currentPathTurns = pathTurns;
       totalFolds = pathTurns.length;
       
       const stripRoot = build3DStrip(pathTurns);
       
-      // 預計算完成時的 BoundingBox，供最後拉遠全景用
       applyFolds(totalFolds);
       stripRoot.updateMatrixWorld(true);
       finalBoundingBox.setFromObject(stripRoot);
       
-      // 初始化動畫狀態
       applyFolds(0);
       const slider = document.getElementById('anim-slider');
       slider.max = totalFolds;
