@@ -603,7 +603,7 @@
   }
   
   // =========================================================================
-  // 核心修復：根據手繪草圖，精確無縫拼接 1.5 白色矩形 與 黑色直角等腰三角形
+  // 終極修復：根據 2.5 倍物理展開比例，完美無縫拼接 1.5 白色矩形與黑色直角三角形
   // =========================================================================
   function generateOrigamiPolygons(startDir, pathTurns) {
       // SVG 座標系：0:Up(-Y), 1:Right(+X), 2:Down(+Y), 3:Left(-X)
@@ -612,10 +612,11 @@
       
       let svgElements = '';
       
-      const W = 1.0;  // 寬度
-      const L = 1.5;  // 白格加長長度
+      const W = 1.0;   // 紙帶寬度
+      const S = 2.5;   // 數學座標到實體座標的放大比例 (1.5 白格 + 2 個 0.5 轉角半徑)
       
-      let cx = 0.0, cy = 0.0;
+      // 數學模型的座標，用來追蹤路徑
+      let math_cx = 0.0, math_cy = 0.0;
       let cdir = startDir;
       
       let minX = 0, maxX = 0, minY = 0, maxY = 0;
@@ -625,77 +626,66 @@
       }
 
       for (let i = 0; i < pathTurns.length; i++) {
-          const turn = pathTurns[i]; // 1 (左轉), -1 (右轉)
+          const turn = pathTurns[i];
           
-          // 1. 鋪設白色長方形 (長度 L, 寬度 W)
-          // nx, ny 是這段長方形「前端邊緣」的中心點
-          const nx = cx + dx[cdir] * L;
-          const ny = cy + dy[cdir] * L;
+          // 在數學模型中，前往下一個轉彎點
+          const math_nx = math_cx + dx[cdir];
+          const math_ny = math_cy + dy[cdir];
           
-          // 垂直於前進方向的法向量 (指向左側)
-          const nx_norm = dy[cdir];
-          const ny_norm = -dx[cdir];
+          // 轉換為實體紙張的真實物理座標
+          const phys_cx = math_cx * S;
+          const phys_cy = math_cy * S;
+          const phys_nx = math_nx * S;
+          const phys_ny = math_ny * S;
           
-          // 矩形的四個角落
-          const w_c1x = cx + nx_norm * (W/2), w_c1y = cy + ny_norm * (W/2);
-          const w_c2x = cx - nx_norm * (W/2), w_c2y = cy - ny_norm * (W/2);
-          const w_c3x = nx - nx_norm * (W/2), w_c3y = ny - ny_norm * (W/2);
-          const w_c4x = nx + nx_norm * (W/2), w_c4y = ny + ny_norm * (W/2);
+          // 1. 鋪設 1.5 長度的白色矩形連桿 (連接兩個轉彎點)
+          // 矩形的起點是離開目前轉角方塊的邊緣，終點是進入下一個轉角方塊的邊緣
+          const start_wx = phys_cx + dx[cdir] * (W/2);
+          const start_wy = phys_cy + dy[cdir] * (W/2);
+          const end_wx = phys_nx - dx[cdir] * (W/2);
+          const end_wy = phys_ny - dy[cdir] * (W/2);
+          
+          const norm_x = dy[cdir];
+          const norm_y = -dx[cdir];
+          
+          const w_c1x = start_wx + norm_x * (W/2), w_c1y = start_wy + norm_y * (W/2);
+          const w_c2x = start_wx - norm_x * (W/2), w_c2y = start_wy - norm_y * (W/2);
+          const w_c3x = end_wx - norm_x * (W/2), w_c3y = end_wy - norm_y * (W/2);
+          const w_c4x = end_wx + norm_x * (W/2), w_c4y = end_wy + norm_y * (W/2);
           
           updateBounds(w_c1x, w_c1y); updateBounds(w_c2x, w_c2y);
           updateBounds(w_c3x, w_c3y); updateBounds(w_c4x, w_c4y);
           
-          // 畫出白色矩形
-          svgElements += `<polygon points="${w_c1x},${w_c1y} ${w_c2x},${w_c2y} ${w_c3x},${w_c3y} ${w_c4x},${w_c4y}" fill="#ffffff" stroke="#111111" stroke-width="0.08" stroke-linejoin="miter"/>`;
+          svgElements += `<polygon points="${w_c1x},${w_c1y} ${w_c2x},${w_c2y} ${w_c3x},${w_c3y} ${w_c4x},${w_c4y}" fill="#ffffff" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
           
-          // 2. 鋪設黑色直角等腰三角形
-          const new_dir = turn === 1 ? (cdir + 3) % 4 : (cdir + 1) % 4;
-
-          // 轉向正方形的中心點
-          const sq_cx = nx + dx[cdir] * (W/2);
-          const sq_cy = ny + dy[cdir] * (W/2);
-
-          // 轉向後，下一個長方形的起始中心點
-          const out_cx = sq_cx + dx[new_dir] * (W/2);
-          const out_cy = sq_cy + dy[new_dir] * (W/2);
-
-          // 轉向後的法向量
-          const out_nx_norm = dy[new_dir];
-          const out_ny_norm = -dx[new_dir];
-
-          // 決定摺紙的「外側直角頂點」
-          const corner_x = sq_cx + (dx[cdir] - dx[new_dir]) * (W/2);
-          const corner_y = sq_cy + (dy[cdir] - dy[new_dir]) * (W/2);
-
-          let p_in_x, p_in_y, p_out_x, p_out_y;
-
-          if (turn === -1) { 
-              // 右轉 (外側在左邊，所以用法向量正向計算邊緣)
-              p_in_x = nx + nx_norm * (W/2);
-              p_in_y = ny + ny_norm * (W/2);
-              p_out_x = out_cx + out_nx_norm * (W/2);
-              p_out_y = out_cy + out_ny_norm * (W/2);
-          } else { 
-              // 左轉 (外側在右邊，所以用法向量反向計算邊緣)
-              p_in_x = nx - nx_norm * (W/2);
-              p_in_y = ny - ny_norm * (W/2);
-              p_out_x = out_cx - out_nx_norm * (W/2);
-              p_out_y = out_cy - out_ny_norm * (W/2);
-          }
-
-          // 畫出黑色直角三角形
-          svgElements += `<polygon points="${p_in_x},${p_in_y} ${corner_x},${corner_y} ${p_out_x},${p_out_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="miter"/>`;
-          updateBounds(corner_x, corner_y);
-
-          // 將中心點移至出發位置，準備畫下一段
-          cx = out_cx;
-          cy = out_cy;
+          // 2. 鋪設等腰直角黑色三角形 (位於下一個轉彎點 phys_nx, phys_ny)
+          const new_dir = (turn === 1) ? (cdir - 1 + 4) % 4 : (cdir + 1) % 4;
+          
+          // 找出轉角的「外側直角頂點」
+          const corner_vx = (dx[cdir] - dx[new_dir]) * (W/2);
+          const corner_vy = (dy[cdir] - dy[new_dir]) * (W/2);
+          
+          const corner_x = phys_nx + corner_vx;
+          const corner_y = phys_ny + corner_vy;
+          
+          // 另外兩個頂點 (貼合白色矩形的地方)
+          const p2_x = corner_x - dx[cdir] * W;
+          const p2_y = corner_y - dy[cdir] * W;
+          const p3_x = corner_x + dx[new_dir] * W;
+          const p3_y = corner_y + dy[new_dir] * W;
+          
+          updateBounds(corner_x, corner_y); updateBounds(p2_x, p2_y); updateBounds(p3_x, p3_y);
+          
+          svgElements += `<polygon points="${corner_x},${corner_y} ${p2_x},${p2_y} ${p3_x},${p3_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
+          
+          // 推進到下一步
+          math_cx = math_nx;
+          math_cy = math_ny;
           cdir = new_dir;
       }
       
       return { svgElements, bounds: { minX, maxX, minY, maxY } };
   }
-
 
   // 取得藍色扭扭樂的邊界
   function getArcBounds(startDir, pathTurns, targets, obstacles) {
@@ -1110,5 +1100,3 @@
   initGrid(false);
   autoRun();
 </script>
-</body>
-</html>
