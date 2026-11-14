@@ -125,7 +125,6 @@
       box-shadow: 0 10px 25px rgba(0,0,0,0.2);
   }
   
-  /* 獨立排版的頂部資訊區與「黑白塊拼接平面圖」 */
   #modal-top-section {
       display: flex; width: 100%; align-items: flex-start; justify-content: space-between;
       margin-bottom: 15px; gap: 15px; border-bottom: 1px solid #eee; padding-bottom: 15px;
@@ -164,30 +163,30 @@
   .btn-export:active { transform: scale(0.98); }
 
   #print-area { display: none; }
-    /* ================== 列印專用 CSS ================== */
+
+  /* ================== 列印專用 CSS (徹底消滅空白頁與置中問題) ================== */
   @media print {
-      body * { visibility: hidden; }
-      #print-area, #print-area * { visibility: visible; }
+      /* 隱藏非列印元素，關鍵：使用 display:none!important 以釋放文件流空間 */
+      body > *:not(#print-area) { display: none !important; }
       
       html, body {
-          height: auto !important; margin: 0 !important; padding: 0 !important; 
-          background: #fff;
+          height: auto !important; margin: 0 !important; padding: 0 !important;
+          background: #fff; overflow: visible !important;
       }
       
       #print-area { 
-          display: flex !important; flex-direction: column; align-items: center; 
-          position: absolute; left: 0; top: 0; width: 100%; height: auto !important;
-          margin: 0; padding: 10mm 0; box-sizing: border-box;
+          display: flex !important; flex-direction: column; align-items: center; justify-content: flex-start;
+          width: 100%; height: auto !important;
+          margin: 0; padding: 0; box-sizing: border-box;
       }
       
       #print-area svg {
           max-width: 100%; height: auto;
-          page-break-inside: avoid; page-break-after: avoid; margin-bottom: 0 !important;
+          page-break-inside: avoid; page-break-after: avoid; display: block; margin: 0 auto;
       }
       
-      @page { size: portrait; margin: 0; }
+      @page { size: portrait; margin: 10mm; }
   }
-
 </style>
 </head>
 <body class="notranslate">
@@ -245,7 +244,7 @@
         <!-- 頂端資訊與獨立縮圖區塊 -->
         <div id="modal-top-section">
             <div id="modal-info"></div>
-            <!-- 獨立的實體摺紙平面圖框 (黑白等腰直角三角形與 1x1.5 白色矩形完美拼接) -->
+            <!-- 獨立的實體摺紙平面圖框 -->
             <div id="modal-thumb-box">
                 <div class="badge-label">實體模型</div>
                 <svg class="modal-thumb-svg" preserveAspectRatio="xMidYMid meet">
@@ -576,7 +575,7 @@
   const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
   const MAIN_TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
 
-  // 產生藍色扭扭樂圓弧 (保留用於主畫面與縮圖列表)
+  // 產生藍色扭扭樂圓弧 (主畫面與縮圖列表使用)
   function generateArcSvgPath(currDirStart, pathTurns) {
       let svgD = "M 0 0";
       let cx = 0, cy = 0, cdir = currDirStart;
@@ -593,17 +592,21 @@
       }
       return svgD;
   }
-    // =========================================================================
-  // 終極修復：順著數學路徑，精確放大 2.5 倍並拼接白矩形與黑直角三角形
+  
   // =========================================================================
-  function generateOrigamiPolygons(startDir, pathTurns) {
-      let svgElements = '';
-      const W = 1.0; 
-      // 數學對角線長度是 √2 (約1.414)，實體長度是 2.5。算出兩者的縮放比例
-      const S = 2.5 / Math.sqrt(2); 
+  // 終極修復：精準正交 (龜兔繪圖法) 展開，完美無縫拼接 1.5 白矩形與黑等腰直角三角形
+  // =========================================================================
+  function generateOrigamiPolygons(pathTurns) {
+      // 嚴格的物理上下左右方向向量：0:Up(-Y), 1:Right(+X), 2:Down(+Y), 3:Left(-X)
+      const dx = [0, 1, 0, -1];
+      const dy = [-1, 0, 1, 0];
       
-      let math_cx = 0.0, math_cy = 0.0;
-      let cdir = startDir;
+      let svgElements = '';
+      const W = 1.0;   // 紙帶寬度
+      const D = 2.5;   // 相鄰兩個轉彎點的物理距離 (0.5黑 + 1.5白 + 0.5黑)
+      
+      let cx = 0.0, cy = 0.0;
+      let pdir = 1;    // 永遠從物理平面的向右(+X)開始畫，確保圖形方正不歪斜
       
       let minX = 0, maxX = 0, minY = 0, maxY = 0;
       function updateBounds(x, y) {
@@ -613,72 +616,57 @@
 
       for (let i = 0; i < pathTurns.length; i++) {
           const turn = pathTurns[i];
-          const transOffset = (cdir << 1) | (turn === 1 ? 0 : 1);
+          // 根據路徑轉向 (-1右轉, 1左轉) 計算下一個前進方向
+          const next_pdir = (pdir + (turn === 1 ? -1 : 1) + 4) % 4;
           
-          const math_dx = MAIN_TRANS_DX[transOffset];
-          const math_dy = MAIN_TRANS_DY[transOffset];
-          const math_nx = math_cx + math_dx;
-          const math_ny = math_cy + math_dy;
-          
-          const phys_cx = math_cx * S, phys_cy = math_cy * S;
-          const phys_nx = math_nx * S, phys_ny = math_ny * S;
-          
-          // 前進方向向量 (長度為 2.5) 與 單位向量 (長度為 1)
-          const p_dx = phys_nx - phys_cx, p_dy = phys_ny - phys_cy;
-          const len = Math.sqrt(p_dx*p_dx + p_dy*p_dy);
-          const u_dx = p_dx / len, u_dy = p_dy / len;
-          const norm_x = u_dy, norm_y = -u_dx; // 法向量
+          // 下一個轉向方塊的中心點
+          const nx = cx + dx[pdir] * D;
+          const ny = cy + dy[pdir] * D;
           
           // === 1. 繪製 1.5 白色矩形連桿 ===
-          const start_wx = phys_cx + u_dx * 0.5, start_wy = phys_cy + u_dy * 0.5;
-          const end_wx = phys_nx - u_dx * 0.5, end_wy = phys_ny - u_dy * 0.5;
+          // 矩形的起點與終點 (扣除掉前後 0.5 的轉向方塊空間)
+          const start_x = cx + dx[pdir] * (W/2);
+          const start_y = cy + dy[pdir] * (W/2);
+          const end_x = nx - dx[pdir] * (W/2);
+          const end_y = ny - dy[pdir] * (W/2);
           
-          const w_c1x = start_wx + norm_x * (W/2), w_c1y = start_wy + norm_y * (W/2);
-          const w_c2x = start_wx - norm_x * (W/2), w_c2y = start_wy - norm_y * (W/2);
-          const w_c3x = end_wx - norm_x * (W/2), w_c3y = end_wy - norm_y * (W/2);
-          const w_c4x = end_wx + norm_x * (W/2), w_c4y = end_wy + norm_y * (W/2);
+          const nx_norm = dy[pdir];
+          const ny_norm = -dx[pdir];
           
-          updateBounds(w_c1x, w_c1y); updateBounds(w_c2x, w_c2y);
-          updateBounds(w_c3x, w_c3y); updateBounds(w_c4x, w_c4y);
+          const c1x = start_x + nx_norm * (W/2), c1y = start_y + ny_norm * (W/2);
+          const c2x = start_x - nx_norm * (W/2), c2y = start_y - ny_norm * (W/2);
+          const c3x = end_x - nx_norm * (W/2), c3y = end_y - ny_norm * (W/2);
+          const c4x = end_x + nx_norm * (W/2), c4y = end_y + ny_norm * (W/2);
           
-          svgElements += `<polygon points="${w_c1x},${w_c1y} ${w_c2x},${w_c2y} ${w_c3x},${w_c3y} ${w_c4x},${w_c4y}" fill="#ffffff" stroke="#111" stroke-width="0.08"/>`;
+          updateBounds(c1x, c1y); updateBounds(c2x, c2y);
+          updateBounds(c3x, c3y); updateBounds(c4x, c4y);
+          
+          svgElements += `<polygon points="${c1x},${c1y} ${c2x},${c2y} ${c3x},${c3y} ${c4x},${c4y}" fill="#ffffff" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
           
           // === 2. 繪製黑色直角轉向三角形 ===
-          const next_cdir = MAIN_TRANS_NDIR[transOffset];
-          const next_turn = pathTurns[(i + 1) % pathTurns.length];
-          const next_transOffset = (next_cdir << 1) | (next_turn === 1 ? 0 : 1);
+          // 精確找出摺紙外側的 90 度直角頂點
+          const corner_x = nx + (dx[pdir] - dx[next_pdir]) * (W/2);
+          const corner_y = ny + (dy[pdir] - dy[next_pdir]) * (W/2);
           
-          const next_math_dx = MAIN_TRANS_DX[next_transOffset];
-          const next_math_dy = MAIN_TRANS_DY[next_transOffset];
-          
-          const next_len = Math.sqrt(next_math_dx*next_math_dx + next_math_dy*next_math_dy);
-          const next_u_dx = next_math_dx / next_len;
-          const next_u_dy = next_math_dy / next_len;
-          
-          // 計算外側直角頂點
-          const corner_x = phys_nx + (u_dx - next_u_dx) * (W/2);
-          const corner_y = phys_ny + (u_dy - next_u_dy) * (W/2);
-          
-          const p2_x = corner_x - u_dx * W;
-          const p2_y = corner_y - u_dy * W;
-          const p3_x = corner_x + next_u_dx * W;
-          const p3_y = corner_y + next_u_dy * W;
+          // 連接白色矩形的兩個短邊頂點
+          const p2_x = corner_x - dx[pdir] * W;
+          const p2_y = corner_y - dy[pdir] * W;
+          const p3_x = corner_x + dx[next_pdir] * W;
+          const p3_y = corner_y + dy[next_pdir] * W;
           
           updateBounds(corner_x, corner_y); updateBounds(p2_x, p2_y); updateBounds(p3_x, p3_y);
           
-          svgElements += `<polygon points="${corner_x},${corner_y} ${p2_x},${p2_y} ${p3_x},${p3_y}" fill="#111" stroke="#111" stroke-width="0.08"/>`;
+          svgElements += `<polygon points="${corner_x},${corner_y} ${p2_x},${p2_y} ${p3_x},${p3_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
           
-          math_cx = math_nx;
-          math_cy = math_ny;
-          cdir = next_cdir;
+          // 更新座標，繼續走下一步
+          cx = nx;
+          cy = ny;
+          pdir = next_pdir;
       }
+      
       return { svgElements, bounds: { minX, maxX, minY, maxY } };
   }
 
-
-
-
-  // 取得藍色扭扭樂的邊界
   function getArcBounds(startDir, pathTurns, targets, obstacles) {
       let minX = 0, maxX = 0, minY = 0, maxY = 0;
       let cx = 0, cy = 0, cdir = startDir;
@@ -730,7 +718,7 @@
       return feats;
   }
   
-  // 生成實體黑白積木拼接圖的 SVG 群組 (供 Modal 與列印版使用)
+  // 生成實體黑白積木拼接圖的 SVG 群組
   function getOrigamiThumbnailSvgGroup(origamiPolygons, viewBox, offsetX, offsetY, scale) {
       return `
       <g transform="translate(${offsetX}, ${offsetY}) scale(${scale})">
@@ -744,7 +732,7 @@
       `;
   }
 
-  // 預覽紙帶
+  // 預覽供剪裁的長條紙帶
   function generatePreviewStripSvg(pathTurns) {
       const N = pathTurns.length;
       const totalSquares = 2 * N;
@@ -792,7 +780,7 @@
       return svg;
   }
 
-  // 列印版：紙帶排版 + 右上角不遮擋黑白縮圖 + 確保無多餘空白頁
+  // 列印版：整體水平置中排版，縮圖居中，徹底消除空白頁
   function generatePrintStripSvg(pathTurns, title, origamiPolygons, origamiViewBox) {
       const N = pathTurns.length;
       const totalSquares = 2 * N;
@@ -802,7 +790,7 @@
       const maxCols = 10; 
       
       const marginX = 40, rowGap = 35;
-      const startPaperY = 180; 
+      const startPaperY = 220; // 往下推移，讓出充足空間給置中的標題與縮圖
       
       const rowsCount = Math.ceil(totalSquares / maxCols);
       const maxRowW = 5 * cellW_odd + 5 * cellW_even;
@@ -812,11 +800,12 @@
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">`;
       svg += `<rect width="100%" height="100%" fill="#ffffff"/>`;
       
-      svg += `<text x="${marginX}" y="50" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 實體藝術藍圖 (${title} / N=${N})</text>`;
-      svg += `<text x="${marginX}" y="80" font-family="sans-serif" font-size="12" fill="#555">白格為 1.5 倍加長骨架。黑格為轉彎關節，請沿白色虛線統一使用「山摺(往前蓋)」。</text>`;
+      // 標題與說明文字強制水平置中
+      svg += `<text x="${svgWidth/2}" y="40" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="bold" fill="#222">Twisty Turny 實體藝術藍圖 (${title} / N=${N})</text>`;
+      svg += `<text x="${svgWidth/2}" y="70" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#555">白格為 1.5 倍加長骨架。黑格為轉彎關節，請沿白色虛線統一使用「山摺(往前蓋)」。</text>`;
 
-      // 放置獨立不疊加的右上角縮圖
-      svg += getOrigamiThumbnailSvgGroup(origamiPolygons, origamiViewBox, svgWidth - 175, 20, 0.9);
+      // 實體縮圖完美置中排列於文字下方
+      svg += getOrigamiThumbnailSvgGroup(origamiPolygons, origamiViewBox, (svgWidth - 130) / 2, 80, 0.95);
 
       let currentGlobalIdx = 0;
       for (let r = 0; r < rowsCount; r++) {
@@ -863,7 +852,7 @@
   window.openModal = function(arcPathD, origamiPolygons, title, infoHtml, arcViewBox, origamiViewBox, gridHtml, featsHtml, pathTurns) {
       document.getElementById('modal-title').innerText = title;
       
-      // 1. 保留大張的藍色扭扭樂圖案背景
+      // 1. 大張背景圖：維持藍色扭扭樂圖形
       const combinedModalSvg = `
           ${gridHtml}
           <path d="${arcPathD}" fill="none" stroke="#007bff" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.4));"/>
@@ -872,7 +861,7 @@
       document.querySelector('.modal-svg').setAttribute('viewBox', arcViewBox);
       document.getElementById('modal-main-arc-content').innerHTML = combinedModalSvg;
       
-      // 2. 設定專屬的黑白幾何拼接實體圖 (左上角小縮圖)
+      // 2. 左上角實體模型縮圖：完美黑白拼接圖
       document.querySelector('.modal-thumb-svg').setAttribute('viewBox', origamiViewBox);
       document.getElementById('modal-svg-content').innerHTML = origamiPolygons;
 
@@ -1004,7 +993,7 @@
               const gridHtml = renderSvgGrid(arcBounds.minX, arcBounds.maxX, arcBounds.minY, arcBounds.maxY, P);
               
               // 取得「精確黑白摺紙拼接圖」SVG 與邊界
-              const origamiObj = generateOrigamiPolygons(pathObj[0], pathTurns);
+              const origamiObj = generateOrigamiPolygons(pathTurns);
               const oriBounds = origamiObj.bounds;
               const oriP = 0.5;
               const origamiViewBox = `${oriBounds.minX - oriP} ${oriBounds.minY - oriP} ${oriBounds.maxX - oriBounds.minX + 2 * oriP} ${oriBounds.maxY - oriBounds.minY + 2 * oriP}`;
@@ -1091,3 +1080,5 @@
   initGrid(false);
   autoRun();
 </script>
+</body>
+</html>
