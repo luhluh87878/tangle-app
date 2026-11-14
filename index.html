@@ -164,30 +164,29 @@
   .btn-export:active { transform: scale(0.98); }
 
   #print-area { display: none; }
-
-  /* ================== 列印專用 CSS ================== */
+    /* ================== 列印專用 CSS (置中對齊，徹底消除空白頁) ================== */
   @media print {
       body * { visibility: hidden; }
       #print-area, #print-area * { visibility: visible; }
       
       html, body {
-          height: auto !important; margin: 0 !important; padding: 0 !important; overflow: visible !important;
+          height: 100% !important; margin: 0 !important; padding: 0 !important; 
+          background: #fff; overflow: hidden !important;
       }
       
       #print-area { 
-          display: flex !important; justify-content: center; align-items: flex-start;
-          position: absolute; left: 0; top: 0; width: 100%; height: auto !important; margin: 0; padding: 0; 
+          display: flex !important; flex-direction: column; align-items: center; 
+          position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+          margin: 0; padding: 10mm; box-sizing: border-box;
       }
       
-      #print-area > svg {
-          max-width: 100%; /* 自動縮放避免超出邊界被卡掉 */
-          height: auto;
-          page-break-inside: avoid; page-break-after: avoid; margin-bottom: 0 !important;
+      #print-area svg {
+          max-width: 100%; max-height: 100%; object-fit: contain;
+          page-break-inside: avoid; page-break-after: avoid;
       }
       
-      @page { size: portrait; margin: 10mm; }
+      @page { size: portrait; margin: 0; }
   }
-
 </style>
 </head>
 <body class="notranslate">
@@ -594,14 +593,18 @@
       return svgD;
   }
     // =========================================================================
-  // 終極修復：座標旋轉 45 度與 2.5 倍展開，完美無縫拼接白矩形與黑三角形
+  // 終極修復：嚴格正交 (水平/垂直) 幾何展開，精準無縫拼接 1.5 白矩形與黑三角形
   // =========================================================================
   function generateOrigamiPolygons(startDir, pathTurns) {
+      // 嚴格的物理上下左右方向向量
+      const dx = [0, 1, 0, -1];
+      const dy = [-1, 0, 1, 0];
+      
       let svgElements = '';
       const W = 1.0;   // 紙帶寬度
-      const S = 2.5;   // 數學座標到實體座標的放大比例
+      const L = 1.5;   // 白色直段長度
       
-      let math_cx = 0.0, math_cy = 0.0;
+      let cx = 0.0, cy = 0.0;
       let cdir = startDir;
       
       let minX = 0, maxX = 0, minY = 0, maxY = 0;
@@ -612,56 +615,36 @@
 
       for (let i = 0; i < pathTurns.length; i++) {
           const turn = pathTurns[i];
-          const turnIdx = turn === 1 ? 0 : 1;
-          const transOffset = (cdir << 1) | turnIdx;
           
-          // 1. 數學模型是在走「對角線」
-          const math_dx = MAIN_TRANS_DX[transOffset];
-          const math_dy = MAIN_TRANS_DY[transOffset];
-          const math_nx = math_cx + math_dx;
-          const math_ny = math_cy + math_dy;
+          // 物理平面的前進方向 (嚴格水平或垂直)
+          const p_dx = dx[cdir];
+          const p_dy = dy[cdir];
+          const norm_x = dy[cdir];
+          const norm_y = -dx[cdir];
           
-          // 2. 將數學座標旋轉 45 度並放大 2.5 倍，映射回紙帶的「正交物理座標」
-          const phys_cx = (math_cx + math_cy) / 2 * S;
-          const phys_cy = (math_cy - math_cx) / 2 * S;
-          const phys_nx = (math_nx + math_ny) / 2 * S;
-          const phys_ny = (math_ny - math_nx) / 2 * S;
+          // 下一個轉向點的中心
+          const nx = cx + p_dx * L;
+          const ny = cy + p_dy * L;
           
-          // 物理平面的前進方向 (-1, 0, 1)
-          const p_dx = (phys_nx - phys_cx) / S;
-          const p_dy = (phys_ny - phys_cy) / S;
-          
-          const norm_x = p_dy;
-          const norm_y = -p_dx;
-          
-          // === 繪製白色 1.5 連桿 ===
-          const start_wx = phys_cx + p_dx * (W/2), start_wy = phys_cy + p_dy * (W/2);
-          const end_wx = phys_nx - p_dx * (W/2), end_wy = phys_ny - p_dy * (W/2);
-          
-          const w_c1x = start_wx + norm_x * (W/2), w_c1y = start_wy + norm_y * (W/2);
-          const w_c2x = start_wx - norm_x * (W/2), w_c2y = start_wy - norm_y * (W/2);
-          const w_c3x = end_wx - norm_x * (W/2), w_c3y = end_wy - norm_y * (W/2);
-          const w_c4x = end_wx + norm_x * (W/2), w_c4y = end_wy + norm_y * (W/2);
+          // === 1. 繪製白色 1.5 連桿 ===
+          const w_c1x = cx + norm_x * (W/2), w_c1y = cy + norm_y * (W/2);
+          const w_c2x = cx - norm_x * (W/2), w_c2y = cy - norm_y * (W/2);
+          const w_c3x = nx - norm_x * (W/2), w_c3y = ny - norm_y * (W/2);
+          const w_c4x = nx + norm_x * (W/2), w_c4y = ny + norm_y * (W/2);
           
           updateBounds(w_c1x, w_c1y); updateBounds(w_c2x, w_c2y);
           updateBounds(w_c3x, w_c3y); updateBounds(w_c4x, w_c4y);
           
           svgElements += `<polygon points="${w_c1x},${w_c1y} ${w_c2x},${w_c2y} ${w_c3x},${w_c3y} ${w_c4x},${w_c4y}" fill="#ffffff" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
           
-          // === 繪製黑色直角轉向三角形 ===
-          const next_cdir = MAIN_TRANS_NDIR[transOffset];
-          const next_turn = pathTurns[(i + 1) % pathTurns.length];
-          const next_transOffset = (next_cdir << 1) | (next_turn === 1 ? 0 : 1);
+          // === 2. 繪製黑色直角轉向三角形 ===
+          const next_cdir = turn === 1 ? (cdir + 3) % 4 : (cdir + 1) % 4;
+          const next_p_dx = dx[next_cdir];
+          const next_p_dy = dy[next_cdir];
           
-          // 取得下一個物理前進方向，來定位三角形尖角
-          const next_math_dx = MAIN_TRANS_DX[next_transOffset];
-          const next_math_dy = MAIN_TRANS_DY[next_transOffset];
-          const next_p_dx = (next_math_dx + next_math_dy) / 2;
-          const next_p_dy = (next_math_dy - next_math_dx) / 2;
-          
-          // 計算紙張折疊處外側的直角頂點
-          const corner_x = phys_nx + (p_dx - next_p_dx) * (W/2);
-          const corner_y = phys_ny + (p_dy - next_p_dy) * (W/2);
+          // 計算紙張折疊處「外側」的直角頂點
+          const corner_x = nx + (p_dx - next_p_dx) * (W/2);
+          const corner_y = ny + (p_dy - next_p_dy) * (W/2);
           
           const p2_x = corner_x - p_dx * W;
           const p2_y = corner_y - p_dy * W;
@@ -672,13 +655,15 @@
           
           svgElements += `<polygon points="${corner_x},${corner_y} ${p2_x},${p2_y} ${p3_x},${p3_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
           
-          math_cx = math_nx;
-          math_cy = math_ny;
+          // 中心點移至新方向的起點
+          cx = nx + next_p_dx * W;
+          cy = ny + next_p_dy * W;
           cdir = next_cdir;
       }
       
       return { svgElements, bounds: { minX, maxX, minY, maxY } };
   }
+
 
 
   // 取得藍色扭扭樂的邊界
