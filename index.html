@@ -149,11 +149,12 @@
         <h3 id="modal-title" style="margin-top: 0; margin-bottom: 5px; color: #333;"></h3>
         
         <div id="modal-split">
+            <!-- 左側 2D SVG 視窗 -->
             <div id="modal-left">
                 <svg class="modal-svg" preserveAspectRatio="xMidYMid meet"><g id="modal-svg-content"></g></svg>
             </div>
+            <!-- 右側 3D 模擬視窗 -->
             <div id="modal-right">
-                <!-- 3D 畫布將注入於此 -->
                 <div id="anim-controls">
                     <button id="btn-play">⏸</button>
                     <input type="range" id="anim-slider" min="0" max="1" step="0.01" value="0" style="flex:1">
@@ -495,7 +496,7 @@
   }
 
   /* =========================================================================
-     3. Three.js 3D 摺紙模擬器 (精準 180 度 + PolygonOffset 防閃爍)
+     3. Three.js 3D 摺紙模擬器 (修復 Canvas 長寬為 0 的 Bug)
   ========================================================================= */
   let scene, camera, renderer, controls;
   let animHinges = [], isAnimPlaying = false, totalFolds = 0, currentPathTurns = null;
@@ -503,35 +504,45 @@
 
   function init3DScene() {
       const container = document.getElementById('modal-right');
-      if (renderer) return; 
-      
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x222222);
+      if (!renderer) {
+          scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x222222);
 
-      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 5000);
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+          camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 5000);
+          renderer = new THREE.WebGLRenderer({ antialias: true });
+          container.insertBefore(renderer.domElement, container.firstChild);
+
+          controls = new OrbitControls(camera, renderer.domElement);
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.1;
+          
+          const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+          scene.add(ambientLight);
+          const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+          dirLight.position.set(100, 200, 300);
+          scene.add(dirLight);
+
+          // 增加 3D 地板網格，讓畫面更有空間感
+          const grid = new THREE.GridHelper(2000, 50, 0x555555, 0x333333);
+          grid.rotation.x = Math.PI / 2;
+          grid.position.z = -20; // 稍微放在紙帶後面
+          scene.add(grid);
+
+          window.addEventListener('resize', () => {
+              if (document.getElementById('modal-overlay').style.display === 'none') return;
+              camera.aspect = container.clientWidth / container.clientHeight;
+              camera.updateProjectionMatrix();
+              renderer.setSize(container.clientWidth, container.clientHeight);
+          });
+
+          controls.addEventListener('start', () => { isAnimPlaying = false; syncPlayButtonUI(); });
+          requestAnimationFrame(render3DLoop);
+      }
+      
+      // 修復核心：每次打開視窗時強制更新渲染器尺寸，防止出現 0x0 黑畫面
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
       renderer.setSize(container.clientWidth, container.clientHeight);
-      container.insertBefore(renderer.domElement, container.firstChild);
-
-      controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.1;
-      
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-      scene.add(ambientLight);
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
-      dirLight.position.set(50, 200, 100);
-      scene.add(dirLight);
-
-      window.addEventListener('resize', () => {
-          if (!document.getElementById('modal-overlay').style.display || document.getElementById('modal-overlay').style.display === 'none') return;
-          camera.aspect = container.clientWidth / container.clientHeight;
-          camera.updateProjectionMatrix();
-          renderer.setSize(container.clientWidth, container.clientHeight);
-      });
-
-      controls.addEventListener('start', () => { isAnimPlaying = false; syncPlayButtonUI(); });
-      requestAnimationFrame(render3DLoop);
   }
 
   function createPaperTexture(text, isTurn, isBackslash, colorStr) {
@@ -591,7 +602,7 @@
       let currentParent = stripRoot;
 
       for (let i = 0; i < pathTurns.length * 2; i++) {
-          const zOffset = -i * 5; 
+          const zOffset = -i; 
           
           if (i % 2 === 0) {
               const stepNum = Math.floor(i / 2) + 1;
@@ -661,7 +672,7 @@
   function render3DLoop() {
       if (isAnimPlaying) {
           const slider = document.getElementById('anim-slider');
-          slider.value = Number(slider.value) + 0.025; 
+          slider.value = Number(slider.value) + 0.03; 
           
           if (slider.value >= totalFolds) {
               slider.value = totalFolds;
@@ -765,7 +776,7 @@
           statusText.innerText = `✅ 找到 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
           statusText.style.color = "#28a745";
           
-          // 確保主網格藍色線條成功畫出 (修復之前的消失問題)
+          // 確保主網格藍色線條成功畫出
           document.getElementById('svg-path').setAttribute('d', generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]));
 
           const resDiv = document.getElementById('results-container');
@@ -837,28 +848,32 @@
           window.print();
       };
 
+      // 顯示視窗
       document.getElementById('modal-overlay').style.display = 'flex';
       
-      init3DScene();
-      currentPathTurns = pathTurns;
-      totalFolds = pathTurns.length;
-      
-      const stripRoot = build3DStrip(pathTurns);
-      
-      applyFolds(totalFolds);
-      stripRoot.updateMatrixWorld(true);
-      finalBoundingBox.setFromObject(stripRoot);
-      
-      applyFolds(0);
-      const slider = document.getElementById('anim-slider');
-      slider.max = totalFolds;
-      slider.value = 0;
-      
-      camera.position.set(-100, -100, 250);
-      controls.target.set(0, 0, 0);
-      
-      isAnimPlaying = true;
-      syncPlayButtonUI();
+      // 關鍵修復：延遲 100ms 讓瀏覽器計算完佈局，再啟動 3D，徹底解決 0x0 破圖黑畫面 bug
+      setTimeout(() => {
+          init3DScene();
+          currentPathTurns = pathTurns;
+          totalFolds = pathTurns.length;
+          
+          const stripRoot = build3DStrip(pathTurns);
+          
+          applyFolds(totalFolds);
+          stripRoot.updateMatrixWorld(true);
+          finalBoundingBox.setFromObject(stripRoot);
+          
+          applyFolds(0);
+          const slider = document.getElementById('anim-slider');
+          slider.max = totalFolds;
+          slider.value = 0;
+          
+          camera.position.set(-100, -100, 300);
+          controls.target.set(0, 0, 0);
+          
+          isAnimPlaying = true;
+          syncPlayButtonUI();
+      }, 100);
   };
 
   window.closeModal = function() {
