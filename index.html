@@ -751,7 +751,7 @@
           statusText.innerText = `✅ 找到 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
           statusText.style.color = "#28a745";
           
-          // 修復：呼叫 generateSvgPath 繪製主畫面的藍色曲線
+          // 確保主網格藍色線條畫出
           document.getElementById('svg-path').setAttribute('d', generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]));
 
           const resDiv = document.getElementById('results-container');
