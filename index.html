@@ -13,7 +13,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="google" content="notranslate">
-<title>Twisty Turny 極速尋路引擎 (Web Worker + 3D摺紙引擎版)</title>
+<title>Twisty Turny 極速尋路引擎 (2D藍圖 + 3D摺紙完全體)</title>
 
 <!-- 引入 Three.js 與 OrbitControls -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -70,12 +70,12 @@
   .thumb-svg { width: 120px; height: 120px; transform: scaleY(-1); background: #fff; border: 1px solid #eee; border-radius: 4px;}
   .thumb-title { font-size: 11px; color: #444; margin-top: 5px; font-weight: bold;}
 
-  #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(4px); }
-  #modal-content { background: #fff; padding: 20px; border-radius: 12px; width: 95%; max-width: 1000px; max-height: 95vh; display: flex; flex-direction: column; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+  #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(4px); }
+  #modal-content { background: #fff; padding: 20px; border-radius: 12px; width: 95%; max-width: 1100px; max-height: 95vh; display: flex; flex-direction: column; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
   #modal-close { position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; cursor: pointer; color: #888; line-height: 1; z-index: 10; }
   #modal-close:hover { color: #333; }
   
-  /* 左右雙視窗佈局 */
+  /* 左右雙視窗佈局 (左2D、右3D) */
   #modal-split { display: flex; flex-direction: row; gap: 15px; width: 100%; height: 45vh; min-height: 300px; margin-bottom: 12px; }
   #modal-left { flex: 1; background: #fff; border: 1px solid #ddd; border-radius: 8px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; }
   #modal-right { flex: 1; background: #222; border: 2px solid #555; border-radius: 8px; position: relative; overflow: hidden; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
@@ -83,7 +83,7 @@
   
   /* 3D 控制列 */
   #anim-controls { position: absolute; bottom: 15px; left: 15px; right: 15px; display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.9); padding: 8px 12px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-  #btn-play { background: #007bff; color: #fff; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 14px; display: flex; justify-content: center; align-items: center; }
+  #btn-play { background: #007bff; color: #fff; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 14px; display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
   #btn-play:hover { background: #0056b3; }
   
   #modal-info { font-size: 13.5px; color: #444; text-align: left; width: 100%; line-height: 1.5; margin-bottom: 8px;}
@@ -115,7 +115,7 @@
     <strong>📖 操作教學：</strong>
     <p>調整設定：<span style="font-weight: normal;">修改「總步數」與「產出上限」。</span></p>
     <p>佈置網格：<span style="font-weight: normal;">點擊淡藍色圓點設定 ⭐目標 / ❌障礙。</span></p>
-    <p>3D 物理摺紙模擬：<span style="font-weight: normal;">點開圖案即可在右側觀看 <b>3D 動態摺紙過程</b>！</span></p>
+    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽二維藍圖與 <b>3D 動態摺紙過程</b>！一鍵列印！</span></p>
   </div>
 
   <div class="slider-group">
@@ -407,6 +407,20 @@
           if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0]; if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
       });
       return { minX, maxX, minY, maxY };
+  }
+
+  function renderSvgFeatures(targets, obstacles) {
+      let feats = `<circle cx="0" cy="0" r="0.25" fill="#222"/>`;
+      targets.forEach(t => {
+          const cx = t[0], cy = t[1];
+          const starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
+          feats += `<polygon points="${starPoints}" fill="gold" stroke="#c69500" stroke-width="0.05" stroke-linejoin="round"/>`;
+      });
+      obstacles.forEach(o => {
+          feats += `<line x1="${o[0]-0.3}" y1="${o[1]-0.3}" x2="${o[0]+0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
+          feats += `<line x1="${o[0]+0.3}" y1="${o[1]-0.3}" x2="${o[0]-0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
+      });
+      return feats;
   }
 
   function renderBlueprintCell(x, y, logicalIdx, pathTurns, cellSize) {
@@ -751,7 +765,7 @@
           statusText.innerText = `✅ 找到 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
           statusText.style.color = "#28a745";
           
-          // 確保主網格藍色線條畫出
+          // 確保主網格藍色線條成功畫出 (修復之前的消失問題)
           document.getElementById('svg-path').setAttribute('d', generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]));
 
           const resDiv = document.getElementById('results-container');
