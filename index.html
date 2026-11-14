@@ -856,7 +856,7 @@
           const chosenPaths = validPaths.slice(0, limit);
           const mainSvg = generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]);
 
-          statusText.innerText = `✅ 極速出圖！為您展示 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
+          statusText.innerText = `展示 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
           statusText.style.color = "#28a745";
           document.getElementById('svg-path').setAttribute('d', mainSvg);
 
