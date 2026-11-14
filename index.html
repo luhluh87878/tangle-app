@@ -1,153 +1,191 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<!-- Google Analytics 流量追蹤代碼 -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-2SC9G5G9H5"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-2SC9G5G9H5');
-</script>
+    <!-- Google Analytics 流量追蹤代碼 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-2SC9G5G9H5"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-2SC9G5G9H5');
+    </script>
 
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="google" content="notranslate">
-<title>Twisty Turny 極速尋路引擎 (2D藍圖 + 3D摺紙完全體)</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="google" content="notranslate">
+    <title>Twisty Turny 極速尋路引擎 (完美 3D 物理引擎版)</title>
 
-<!-- 引入 Three.js 與 OrbitControls -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- 引入 Three.js 與 OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-<style>
-  :root { --cell: 40px; }
-  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
+    <style>
+        :root { --cell: 40px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
 
-  #controls { padding: 10px; background: #fff; border-radius: 8px; margin: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #ddd; display: flex; flex-direction: column; gap: 10px; }
-  .tutorial-box { background: #e9ecef; border-left: 4px solid #007bff; padding: 12px 15px; border-radius: 6px; font-size: 13.5px; color: #333; width: 100%; box-sizing: border-box; line-height: 1.6; }
-  .tutorial-box strong { color: #0056b3; font-size: 15px; display: block; margin-bottom: 6px; }
-  .tutorial-box p { margin: 0 0 6px 0; font-weight: bold; }
-  
-  .slider-group { display: flex; align-items: center; gap: 8px; font-weight: bold; color: #444; font-size: 14px;}
-  input[type=range] { flex-grow: 1; cursor: pointer; }
-  .val-badge { background: #333; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 12px; min-width: 25px; text-align: center;}
-  
-  .btn-reset { padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; background: #dc3545; color: #fff; width: 100%; font-size: 16px; box-shadow: 0 2px 4px rgba(220,53,69,0.3); transition: transform 0.1s;}
-  .btn-reset:active { transform: scale(0.98); }
+        /* --- 左側控制面板 --- */
+        #controls { padding: 15px; background: #fff; border-radius: 8px; margin: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); border: 1px solid #ddd; display: flex; flex-direction: column; gap: 15px; }
+        .tutorial-box { background: #e9ecef; border-left: 4px solid #007bff; padding: 12px 15px; border-radius: 6px; font-size: 13.5px; color: #333; line-height: 1.6; }
+        .tutorial-box strong { color: #0056b3; font-size: 15px; display: block; margin-bottom: 6px; }
+        .tutorial-box p { margin: 0 0 6px 0; font-weight: bold; }
+        
+        .slider-group { display: flex; align-items: center; gap: 10px; font-weight: bold; color: #444; font-size: 14px;}
+        input[type=range].main-slider { flex-grow: 1; cursor: pointer; }
+        .val-badge { background: #333; color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; min-width: 25px; text-align: center;}
+        
+        .btn-reset { padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; background: #dc3545; color: #fff; width: 100%; font-size: 16px; box-shadow: 0 2px 4px rgba(220,53,69,0.3); transition: transform 0.1s;}
+        .btn-reset:active { transform: scale(0.98); }
 
-  #scroll-wrapper { width: calc(100% - 20px); height: 45vh; overflow: auto; border: 2px solid #ccc; background: #fff; border-radius: 6px; margin: 0 10px; position: relative;}
-  #layout-grid { display: grid; grid-template-columns: 35px max-content; grid-template-rows: 35px max-content; width: max-content; }
-  #corner { grid-column: 1; grid-row: 1; position: sticky; top: 0; left: 0; z-index: 20; background: #eaeaea; border-right: 1px solid #aaa; border-bottom: 1px solid #aaa; }
-  #axis-x { grid-column: 2; grid-row: 1; position: sticky; top: 0; z-index: 15; background: #f4f4f4; border-bottom: 1px solid #aaa; }
-  #axis-y { grid-column: 1; grid-row: 2; position: sticky; left: 0; z-index: 15; background: #f4f4f4; border-right: 1px solid #aaa; }
-  .axis-inner { position: relative; width: 100%; height: 100%; }
-  #board-container { grid-column: 2; grid-row: 2; padding: 20px; background: #fff; }
-  #board { position: relative; background-size: var(--cell) var(--cell); background-position: calc(var(--cell)/2) calc(var(--cell)/2); background-image: linear-gradient(to right, #ddd 1px, transparent 1px), linear-gradient(to bottom, #ddd 1px, transparent 1px); border-right: 1px solid #ddd; border-bottom: 1px solid #ddd; }
-  .axis-label-x { position: absolute; bottom: 4px; transform: translateX(-50%); font-size: 11px; font-weight: bold; color: #555; }
-  .axis-label-y { position: absolute; right: 4px; transform: translateY(-50%); font-size: 11px; font-weight: bold; color: #555; }
+        /* --- 網格佈局區 --- */
+        #scroll-wrapper { width: calc(100% - 20px); height: 45vh; overflow: auto; border: 2px solid #ccc; background: #fff; border-radius: 6px; margin: 0 10px; position: relative;}
+        #layout-grid { display: grid; grid-template-columns: 35px max-content; grid-template-rows: 35px max-content; width: max-content; }
+        #corner { grid-column: 1; grid-row: 1; position: sticky; top: 0; left: 0; z-index: 20; background: #eaeaea; border-right: 1px solid #aaa; border-bottom: 1px solid #aaa; }
+        #axis-x { grid-column: 2; grid-row: 1; position: sticky; top: 0; z-index: 15; background: #f4f4f4; border-bottom: 1px solid #aaa; }
+        #axis-y { grid-column: 1; grid-row: 2; position: sticky; left: 0; z-index: 15; background: #f4f4f4; border-right: 1px solid #aaa; }
+        .axis-inner { position: relative; width: 100%; height: 100%; }
+        #board-container { grid-column: 2; grid-row: 2; padding: 20px; background: #fff; }
+        
+        #board { position: relative; background-size: var(--cell) var(--cell); background-position: calc(var(--cell)/2) calc(var(--cell)/2); background-image: linear-gradient(to right, #ddd 1px, transparent 1px), linear-gradient(to bottom, #ddd 1px, transparent 1px); border-right: 1px solid #ddd; border-bottom: 1px solid #ddd; }
+        .axis-label-x { position: absolute; bottom: 4px; transform: translateX(-50%); font-size: 11px; font-weight: bold; color: #555; }
+        .axis-label-y { position: absolute; right: 4px; transform: translateY(-50%); font-size: 11px; font-weight: bold; color: #555; }
 
-  .node { position: absolute; width: calc(var(--cell) * 0.8); height: calc(var(--cell) * 0.8); transform: translate(-50%, -50%); border-radius: 50%; display: flex; justify-content: center; align-items: center; transition: transform 0.1s; z-index: 5; }
-  .node.valid-parity { cursor: pointer; }
-  .node.valid-parity::before { content: ''; position: absolute; width: 8px; height: 8px; background: #cce5ff; border-radius: 50%; transition: all 0.2s; z-index: -1; }
-  .node.valid-parity:hover::before { transform: scale(2.5); background: #99ccff; }
-  .node.target::before, .node.obstacle::before, .node.center::before { display: none; }
-  .node.invalid-parity { width: 12px; height: 12px; min-width: 12px; min-height: 12px; background-color: transparent; pointer-events: none; border-radius: 0; background-image: linear-gradient(45deg, transparent 40%, #dee2e6 40%, #dee2e6 60%, transparent 60%), linear-gradient(-45deg, transparent 40%, #dee2e6 40%, #dee2e6 60%, transparent 60%); }
-  .node.target { font-size: calc(var(--cell) * 0.6); z-index: 6; text-shadow: 0 0 4px #fff;}
-  .node.obstacle { font-size: calc(var(--cell) * 0.5); z-index: 6; color: #dc3545; font-weight: bold;}
-  .node.center { font-size: calc(var(--cell) * 0.7); z-index: 7; cursor: not-allowed; }
-  
-  #svg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleY(-1); pointer-events: none; z-index: 4; }
-  
-  .loader { display: inline-block; width: 12px; height: 12px; border: 2px solid #007bff; border-bottom-color: transparent; border-radius: 50%; animation: rotation 1s linear infinite; margin-right: 6px; vertical-align: middle;}
-  @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .node { position: absolute; width: calc(var(--cell) * 0.8); height: calc(var(--cell) * 0.8); transform: translate(-50%, -50%); border-radius: 50%; display: flex; justify-content: center; align-items: center; transition: transform 0.1s; z-index: 5; }
+        .node.valid-parity { cursor: pointer; }
+        .node.valid-parity::before { content: ''; position: absolute; width: 8px; height: 8px; background: #cce5ff; border-radius: 50%; transition: all 0.2s; z-index: -1; }
+        .node.valid-parity:hover::before { transform: scale(2.5); background: #99ccff; }
+        .node.target::before, .node.obstacle::before, .node.center::before { display: none; }
+        .node.invalid-parity { width: 12px; height: 12px; min-width: 12px; min-height: 12px; background-color: transparent; pointer-events: none; border-radius: 0; background-image: linear-gradient(45deg, transparent 40%, #dee2e6 40%, #dee2e6 60%, transparent 60%), linear-gradient(-45deg, transparent 40%, #dee2e6 40%, #dee2e6 60%, transparent 60%); }
+        .node.target { font-size: calc(var(--cell) * 0.6); z-index: 6; text-shadow: 0 0 4px #fff;}
+        .node.obstacle { font-size: calc(var(--cell) * 0.5); z-index: 6; color: #dc3545; font-weight: bold;}
+        .node.center { font-size: calc(var(--cell) * 0.7); z-index: 7; cursor: not-allowed; }
+        
+        #svg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleY(-1); pointer-events: none; z-index: 4; }
+        
+        .loader { display: inline-block; width: 14px; height: 14px; border: 2px solid #007bff; border-bottom-color: transparent; border-radius: 50%; animation: rotation 1s linear infinite; margin-right: 6px; vertical-align: middle;}
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error-pulse { animation: shake-red 0.5s ease-in-out infinite alternate; background-color: rgba(220, 53, 69, 0.4) !important; border: 2px solid #dc3545; z-index: 20; }
+        @keyframes shake-red { 0% { transform: translate(-50%, -50%) scale(1) rotate(0deg); } 25% { transform: translate(-55%, -50%) scale(1.2) rotate(-10deg); } 50% { transform: translate(-45%, -50%) scale(1.2) rotate(10deg); } 75% { transform: translate(-55%, -50%) scale(1.2) rotate(-10deg); } 100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); } }
 
-  .error-pulse { animation: shake-red 0.5s ease-in-out infinite alternate; background-color: rgba(220, 53, 69, 0.4) !important; border: 2px solid #dc3545; z-index: 20; }
-  @keyframes shake-red { 0% { transform: translate(-50%, -50%) scale(1) rotate(0deg); } 25% { transform: translate(-55%, -50%) scale(1.2) rotate(-10deg); } 50% { transform: translate(-45%, -50%) scale(1.2) rotate(10deg); } 75% { transform: translate(-55%, -50%) scale(1.2) rotate(-10deg); } 100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); } }
+        /* --- 縮圖結果區 --- */
+        #results-container { display: flex; flex-wrap: wrap; gap: 15px; padding: 15px; justify-content: center; }
+        .thumb-card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; cursor: pointer; transition: all 0.2s;}
+        .thumb-card:hover { transform: translateY(-3px); box-shadow: 0 6px 12px rgba(0,123,255,0.15); border-color: #007bff;}
+        .thumb-svg { width: 130px; height: 130px; transform: scaleY(-1); background: #fff; border: 1px solid #eee; border-radius: 4px;}
+        .thumb-title { font-size: 12px; color: #444; margin-top: 8px; font-weight: bold;}
 
-  #results-container { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px; justify-content: center; }
-  .thumb-card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: center; cursor: pointer; transition: transform 0.2s;}
-  .thumb-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-color: #007bff;}
-  .thumb-svg { width: 120px; height: 120px; transform: scaleY(-1); background: #fff; border: 1px solid #eee; border-radius: 4px;}
-  .thumb-title { font-size: 11px; color: #444; margin-top: 5px; font-weight: bold;}
+        /* --- 放大的視窗 (Modal) --- */
+        #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(5px); }
+        #modal-content { background: #fff; padding: 25px; border-radius: 12px; width: 95%; max-width: 1200px; max-height: 95vh; display: flex; flex-direction: column; position: relative; box-shadow: 0 15px 40px rgba(0,0,0,0.4); }
+        
+        #modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+        #modal-title-area { display: flex; flex-direction: column; gap: 5px; }
+        #modal-title { margin: 0; font-size: 20px; color: #222; }
+        #modal-info { font-size: 13px; color: #555; background: #f8f9fa; padding: 6px 12px; border-radius: 6px; border: 1px solid #eee; display: flex; gap: 15px; }
+        .coord-tag { display: inline-block; background: #e9ecef; padding: 2px 6px; border-radius: 4px; margin-left: 4px; font-family: monospace; font-size: 12px; color: #333; border: 1px solid #ccc;}
+        
+        #modal-close { font-size: 32px; font-weight: bold; cursor: pointer; color: #aaa; line-height: 1; transition: color 0.2s; }
+        #modal-close:hover { color: #dc3545; }
+        
+        /* 左右雙視窗佈局 (左2D、右3D) */
+        #modal-split { display: flex; flex-direction: row; gap: 20px; width: 100%; height: 45vh; min-height: 350px; margin-bottom: 20px; }
+        #modal-left { flex: 1; background: #fff; border: 1px solid #ddd; border-radius: 8px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; box-shadow: inset 0 0 10px rgba(0,0,0,0.02); }
+        .modal-svg { width: 100%; height: 100%; transform: scaleY(-1); }
+        
+        /* 3D 區域 (修復 Canvas 尺寸 bug) */
+        #modal-right { flex: 1; background: #1a1a1a; border: 2px solid #444; border-radius: 8px; position: relative; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); display: flex; }
+        #modal-right canvas { display: block; width: 100% !important; height: 100% !important; outline: none; }
+        
+        /* 3D 美化版控制列 */
+        #anim-controls { position: absolute; bottom: 15px; left: 15px; right: 15px; display: flex; gap: 15px; align-items: center; background: rgba(255,255,255,0.95); padding: 10px 15px; border-radius: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 10; }
+        #btn-play { background: #007bff; color: #fff; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; font-size: 16px; display: flex; justify-content: center; align-items: center; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,123,255,0.4); transition: transform 0.1s, background 0.2s; }
+        #btn-play:hover { background: #0056b3; transform: scale(1.05); }
+        #btn-play:active { transform: scale(0.95); }
+        
+        /* 美化拉桿 (進度條) */
+        #anim-slider { -webkit-appearance: none; flex: 1; height: 8px; background: #ddd; border-radius: 4px; outline: none; cursor: pointer; }
+        #anim-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #007bff; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: transform 0.1s; }
+        #anim-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        
+        #anim-step-text { font-family: monospace; font-size: 14px; font-weight: bold; color: #333; min-width: 65px; text-align: right; }
+        
+        /* 紙帶預覽與列印 */
+        #strip-preview-title { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 8px; }
+        #strip-preview-container { width: 100%; height: 80px; min-height: 80px; overflow-x: auto; overflow-y: hidden; background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; display: flex; align-items: center; padding: 0 10px; }
+        #strip-preview-container svg { height: 60px; width: auto; flex-shrink: 0; }
 
-  #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; backdrop-filter: blur(4px); }
-  #modal-content { background: #fff; padding: 20px; border-radius: 12px; width: 95%; max-width: 1100px; max-height: 95vh; display: flex; flex-direction: column; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-  #modal-close { position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; cursor: pointer; color: #888; line-height: 1; z-index: 10; }
-  #modal-close:hover { color: #333; }
-  
-  /* 左右雙視窗佈局 (左2D、右3D) */
-  #modal-split { display: flex; flex-direction: row; gap: 15px; width: 100%; height: 45vh; min-height: 300px; margin-bottom: 12px; }
-  #modal-left { flex: 1; background: #fff; border: 1px solid #ddd; border-radius: 8px; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; }
-  #modal-right { flex: 1; background: #222; border: 2px solid #555; border-radius: 8px; position: relative; overflow: hidden; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
-  .modal-svg { width: 100%; height: 100%; transform: scaleY(-1); }
-  
-  /* 3D 控制列 */
-  #anim-controls { position: absolute; bottom: 15px; left: 15px; right: 15px; display: flex; gap: 10px; align-items: center; background: rgba(255,255,255,0.9); padding: 8px 12px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-  #btn-play { background: #007bff; color: #fff; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 14px; display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
-  #btn-play:hover { background: #0056b3; }
-  
-  #modal-info { font-size: 13.5px; color: #444; text-align: left; width: 100%; line-height: 1.5; margin-bottom: 8px;}
-  #strip-preview-container { width: 100%; height: 80px; min-height: 80px; overflow-x: auto; overflow-y: hidden; background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px; box-sizing: border-box; display: flex; align-items: center; padding: 0 10px; }
-  #strip-preview-container svg { height: 60px; width: auto; flex-shrink: 0; }
+        .btn-export { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; background: #198754; color: #fff; width: 100%; font-size: 16px; box-shadow: 0 4px 6px rgba(25,135,84,0.3); transition: background 0.2s, transform 0.1s; }
+        .btn-export:hover { background: #157347; }
+        .btn-export:active { transform: scale(0.98); }
 
-  .btn-export { padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; background: #198754; color: #fff; width: 100%; font-size: 14.5px; box-shadow: 0 2px 5px rgba(25,135,84,0.3); transition: background 0.2s, transform 0.1s; flex-shrink: 0; }
-  .btn-export:hover { background: #157347; }
-  .btn-export:active { transform: scale(0.98); }
-
-  #print-area { display: none; }
-  @media print {
-      body * { visibility: hidden; }
-      #print-area, #print-area * { visibility: visible; }
-      #print-area { display: block; position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
-      @page { size: portrait; margin: 10mm; }
-  }
-  @media (max-width: 768px) {
-      #modal-split { flex-direction: column; height: 65vh; }
-  }
-</style>
+        #print-area { display: none; }
+        @media print {
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { display: block; position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+            @page { size: portrait; margin: 10mm; }
+        }
+        @media (max-width: 768px) {
+            #modal-split { flex-direction: column; height: auto; min-height: 60vh; }
+            #modal-left { min-height: 300px; }
+            #modal-right { min-height: 300px; }
+        }
+    </style>
 </head>
 <body class="notranslate">
 
+<!-- 列印專用區塊 -->
 <div id="print-area"></div>
 
 <div id="controls">
-  <div class="tutorial-box">
-    <strong>📖 操作教學：</strong>
-    <p>調整設定：<span style="font-weight: normal;">修改「總步數」與「產出上限」。</span></p>
-    <p>佈置網格：<span style="font-weight: normal;">點擊淡藍色圓點設定 ⭐目標 / ❌障礙。</span></p>
-    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽二維藍圖與 <b>3D 動態摺紙過程</b>！一鍵列印！</span></p>
-  </div>
+    <div class="tutorial-box">
+        <strong>📖 操作教學：</strong>
+        <p>1. 調整設定：<span style="font-weight: normal;">修改「總步數」與「產出上限」。</span></p>
+        <p>2. 佈置網格：<span style="font-weight: normal;">點擊淡藍色圓點，設定 ⭐目標 (必經) / ❌障礙 (不可走)。</span></p>
+        <p>3. 3D 動態摺紙：<span style="font-weight: normal;">下方縮圖算完後，點開即可預覽二維藍圖與 <b>3D 動態實體摺紙模擬</b>！</span></p>
+    </div>
 
-  <div class="slider-group">
-    👣 步數: <input type="range" id="stepsInput" min="4" max="100" step="4" value="20" oninput="document.getElementById('stepsVal').innerText=this.value; initGrid(false); autoRun();">
-    <span class="val-badge" id="stepsVal">20</span>
-  </div>
-  <div class="slider-group">
-    🖼️ 上限: <input type="range" id="limitInput" min="1" max="20" step="1" value="5" oninput="document.getElementById('limitVal').innerText=this.value; autoRun();">
-    <span class="val-badge" id="limitVal">5</span>
-  </div>
-  <button class="btn-reset" onclick="initGrid(true); autoRun();">🗑️ 清空網格</button>
-  <div id="statusText" style="color: #666; font-size: 13px; font-weight: bold; text-align: center;">系統就緒。</div>
+    <div class="slider-group">
+        👣 步數: 
+        <input type="range" class="main-slider" id="stepsInput" min="4" max="100" step="4" value="20" oninput="document.getElementById('stepsVal').innerText=this.value; initGrid(false); autoRun();">
+        <span class="val-badge" id="stepsVal">20</span>
+    </div>
+    <div class="slider-group">
+        🖼️ 上限: 
+        <input type="range" class="main-slider" id="limitInput" min="1" max="20" step="1" value="5" oninput="document.getElementById('limitVal').innerText=this.value; autoRun();">
+        <span class="val-badge" id="limitVal">5</span>
+    </div>
+    <button class="btn-reset" onclick="initGrid(true); autoRun();">🗑️ 清空網格</button>
+    <div id="statusText" style="color: #666; font-size: 13px; font-weight: bold; text-align: center;">系統就緒。</div>
 </div>
 
 <div id="scroll-wrapper">
-  <div id="layout-grid">
-    <div id="corner"></div>
-    <div id="axis-x"><div class="axis-inner" id="axis-x-inner"></div></div>
-    <div id="axis-y"><div class="axis-inner" id="axis-y-inner"></div></div>
-    <div id="board-container"><div id="board">
-        <svg id="svg-overlay"><path id="svg-path" d="" fill="none" stroke="#007bff" stroke-width="0.35" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.6));"/></svg>
-    </div></div>
-  </div>
+    <div id="layout-grid">
+        <div id="corner"></div>
+        <div id="axis-x"><div class="axis-inner" id="axis-x-inner"></div></div>
+        <div id="axis-y"><div class="axis-inner" id="axis-y-inner"></div></div>
+        <div id="board-container">
+            <div id="board">
+                <svg id="svg-overlay"><path id="svg-path" d="" fill="none" stroke="#007bff" stroke-width="0.35" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.6));"/></svg>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="results-container"></div>
 
+<!-- 放大檢視視窗 (Modal) -->
 <div id="modal-overlay" onclick="if(event.target===this) closeModal()">
     <div id="modal-content">
-        <div id="modal-close" onclick="closeModal()">&times;</div>
-        <h3 id="modal-title" style="margin-top: 0; margin-bottom: 5px; color: #333;"></h3>
+        <!-- 標頭與資訊區 -->
+        <div id="modal-header">
+            <div id="modal-title-area">
+                <h3 id="modal-title"></h3>
+                <div id="modal-info"></div>
+            </div>
+            <div id="modal-close" onclick="closeModal()">&times;</div>
+        </div>
         
+        <!-- 左右雙視窗 -->
         <div id="modal-split">
             <!-- 左側 2D SVG 視窗 -->
             <div id="modal-left">
@@ -155,739 +193,883 @@
             </div>
             <!-- 右側 3D 模擬視窗 -->
             <div id="modal-right">
+                <!-- 3D Canvas 將由 Three.js 自動注入於此 -->
                 <div id="anim-controls">
-                    <button id="btn-play">⏸</button>
-                    <input type="range" id="anim-slider" min="0" max="1" step="0.01" value="0" style="flex:1">
+                    <button id="btn-play">▶</button>
+                    <input type="range" id="anim-slider" min="0" max="1" step="0.01" value="0">
+                    <span id="anim-step-text">0 / 0</span>
                 </div>
             </div>
         </div>
         
-        <div style="width: 100%; text-align: left; font-size: 13px; font-weight: bold; color: #444; margin-bottom: 5px;">📜 連續 2N 方格紙帶預覽 (可左右滑動)：</div>
+        <!-- 下方紙帶預覽與列印 -->
+        <div id="strip-preview-title">📜 連續 2N 方格紙帶預覽 (可左右滑動)：</div>
         <div id="strip-preview-container"></div>
-        <button id="btn-print-blueprint" class="btn-export">🖨️ 進入列印 / 另存 PDF (自動分段)</button>
+        <button id="btn-print-blueprint" class="btn-export">🖨️ 進入列印 / 另存 PDF (自動分段排版)</button>
     </div>
 </div>
 
 <script>
-  /* =========================================================================
-     1. Web Worker 背景尋路引擎
-  ========================================================================= */
-  const workerCode = `
-      const TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
-      const TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
-      const TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
-
-      function solveTwistyTurnyOptimized(totalSteps, rawTargets, rawObstacles, requiredCount) {
-          const R = Math.floor(totalSteps / 2);
-          const W = 2 * R + 1;
-          const totalCells = W * W;
-          const getIdx = (x, y) => (y + R) * W + (x + R);
-          const targets = [];
-          for (let i = 0; i < rawTargets.length; i++) {
-              if (rawTargets[i][0] !== 0 || rawTargets[i][1] !== 0) targets.push(rawTargets[i]);
-          }
-          const K = targets.length;
-          if (K > 20) return { status: "error", nodes: [], msg: "❌ 目標過多 (上限 20)！" };
-
-          const obstacleMap = new Uint8Array(totalCells);
-          for (let i = 0; i < rawObstacles.length; i++) {
-              if (Math.abs(rawObstacles[i][0]) <= R && Math.abs(rawObstacles[i][1]) <= R) obstacleMap[getIdx(rawObstacles[i][0], rawObstacles[i][1])] = 1;
-          }
-          if (obstacleMap[getIdx(0, 0)] === 1) return { status: "error", nodes: ["0,0"], msg: "❌ 起點有障礙物！" };
-
-          for (let i = 0; i < K; i++) {
-              const tx = targets[i][0], ty = targets[i][1];
-              if (Math.abs(tx) > R || Math.abs(ty) > R) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標超出範圍！" };
-              if (obstacleMap[getIdx(tx, ty)] === 1) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標與障礙重疊！" };
-              if ((Math.abs(tx) + Math.abs(ty)) % 2 !== 0) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標奇偶性錯誤！" };
-          }
-
-          const dist = (x1, y1, x2, y2) => Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
-          const P = K + 1;
-          const distMat = new Int32Array(P * P);
-          const ptsX = new Int32Array(P), ptsY = new Int32Array(P);
-          ptsX[0] = 0; ptsY[0] = 0;
-          for (let i = 0; i < K; i++) { ptsX[i + 1] = targets[i][0]; ptsY[i + 1] = targets[i][1]; }
-          for (let i = 0; i < P; i++) for (let j = 0; j < P; j++) distMat[i * P + j] = dist(ptsX[i], ptsY[i], ptsX[j], ptsY[j]);
-
-          const numMasks = 1 << K;
-          const dp = new Int32Array(numMasks * K);
-          dp.fill(-1);
-
-          function getTspDist(mask, lastIdx) {
-              if (mask === 0) return distMat[(lastIdx + 1) * P + 0];
-              const memoKey = mask * K + lastIdx;
-              if (dp[memoKey] !== -1) return dp[memoKey];
-              let minVal = 1e9;
-              for (let next = 0; next < K; next++) {
-                  if ((mask & (1 << next)) !== 0) {
-                      const cost = distMat[(lastIdx + 1) * P + (next + 1)] + getTspDist(mask & ~(1 << next), next);
-                      if (cost < minVal) minVal = cost;
-                  }
-              }
-              dp[memoKey] = minVal; return minVal;
-          }
-
-          let minRequired = 0;
-          if (K > 0) {
-              minRequired = 1e9;
-              for (let first = 0; first < K; first++) {
-                  const cost = distMat[0 * P + (first + 1)] + getTspDist((numMasks - 1) & ~(1 << first), first);
-                  if (cost < minRequired) minRequired = cost;
-              }
-          }
-          if (minRequired > totalSteps) return { status: "error", nodes: targets.map(t => t[0] + "," + t[1]), msg: "❌ 步數不足，需 " + minRequired + " 步。" };
-
-          const qX = new Int32Array(totalCells), qY = new Int32Array(totalCells), flooded = new Uint8Array(totalCells);
-          let qHead = 0, qTail = 0;
-          qX[qTail] = 0; qY[qTail] = 0; qTail++; flooded[getIdx(0, 0)] = 1;
-          const fdx = [-1, 1, -1, 1], fdy = [1, 1, -1, -1];
-          while (qHead < qTail) {
-              const cx = qX[qHead], cy = qY[qHead]; qHead++;
-              for (let d = 0; d < 4; d++) {
-                  const nx = cx + fdx[d], ny = cy + fdy[d];
-                  if (Math.abs(nx) <= R && Math.abs(ny) <= R) {
-                      const nidx = getIdx(nx, ny);
-                      if (flooded[nidx] === 0 && obstacleMap[nidx] === 0) { flooded[nidx] = 1; qX[qTail] = nx; qY[qTail] = ny; qTail++; }
-                  }
-              }
-          }
-          for (let i = 0; i < K; i++) if (flooded[getIdx(targets[i][0], targets[i][1])] === 0) return { status: "error", nodes: [targets[i][0] + "," + targets[i][1]], msg: "❌ 目標被死胡同包圍！" };
-
-          const targetBitMap = new Int8Array(totalCells);
-          targetBitMap.fill(-1);
-          for (let i = 0; i < K; i++) targetBitMap[getIdx(targets[i][0], targets[i][1])] = i;
-
-          const visited = new Uint8Array(totalCells);
-          visited[getIdx(0, 0)] = 1;
-          const pathTurns = new Int8Array(totalSteps);
-          const validPaths = [];
-          const seenFootprints = new Set();
-          const quotas = [[Math.floor((totalSteps + 4) / 2), Math.floor((totalSteps - 4) / 2)], [Math.floor((totalSteps - 4) / 2), Math.floor((totalSteps + 4) / 2)]];
-          let isCapped = false;
-          const targetSearchLimit = Math.max(10, requiredCount * 2);
-
-          function estimateLowerBound(cx, cy, mask) {
-              if (mask === 0) return Math.max(Math.abs(cx), Math.abs(cy));
-              let minVal = 1e9;
-              for (let next = 0; next < K; next++) {
-                  if ((mask & (1 << next)) !== 0) {
-                      const cost = dist(cx, cy, ptsX[next + 1], ptsY[next + 1]) + getTspDist(mask & ~(1 << next), next);
-                      if (cost < minVal) minVal = cost;
-                  }
-              }
-              return minVal;
-          }
-
-          function dfs(step, x, y, cdir, leftRem, rightRem, unvisitedMask, startDir) {
-              if (isCapped || validPaths.length >= targetSearchLimit) { isCapped = true; return; }
-              if (totalSteps - step < estimateLowerBound(x, y, unvisitedMask)) return;
-
-              if (step === totalSteps) {
-                  if (x === 0 && y === 0 && unvisitedMask === 0) {
-                      if (totalSteps > 4) {
-                          let c0 = pathTurns[0], c1 = pathTurns[1], c2 = pathTurns[2];
-                          let e0 = pathTurns[totalSteps - 3], e1 = pathTurns[totalSteps - 2], e2 = pathTurns[totalSteps - 1];
-                          if ((e0 === e1 && e1 === e2 && e2 === c0) || (e1 === e2 && e2 === c0 && c0 === c1) || (e2 === c0 && c0 === c1 && c1 === c2)) return;
-                      }
-                      let fpCx = 0, fpCy = 0, fpCdir = startDir, edges = [];
-                      for (let i = 0; i < totalSteps; i++) {
-                          const transOffset = (fpCdir << 1) | (pathTurns[i] === 1 ? 0 : 1);
-                          const nx = fpCx + TRANS_DX[transOffset], ny = fpCy + TRANS_DY[transOffset];
-                          fpCdir = TRANS_NDIR[transOffset];
-                          const p1 = (fpCx + 50) | ((fpCy + 50) << 7), p2 = (nx + 50) | ((ny + 50) << 7);
-                          edges.push(p1 < p2 ? (p1 | (p2 << 14)) : (p2 | (p1 << 14)));
-                          fpCx = nx; fpCy = ny;
-                      }
-                      edges.sort((a, b) => a - b);
-                      const fp = edges.join(",");
-                      if (!seenFootprints.has(fp)) { seenFootprints.add(fp); validPaths.push([startDir, Array.from(pathTurns)]); }
-                  }
-                  return;
-              }
-
-              let restricted = 0;
-              if (totalSteps > 4 && step >= 3) {
-                  const t1 = pathTurns[step - 1];
-                  if (t1 === pathTurns[step - 2] && t1 === pathTurns[step - 3]) restricted = t1;
-              }
-
-              for (let turnIdx = 0; turnIdx < 2; turnIdx++) {
-                  const turn = turnIdx === 0 ? 1 : -1;
-                  const rem = turn === 1 ? leftRem : rightRem;
-                  if (rem <= 0 || turn === restricted) continue;
-                  
-                  if (totalSteps > 4 && step >= totalSteps - 3) {
-                      const f0 = pathTurns[0], f1 = pathTurns[1], f2 = pathTurns[2];
-                      if (step === totalSteps - 1) {
-                          if (turn === pathTurns[step-1] && turn === pathTurns[step-2] && turn === f0) continue;
-                          if (turn === pathTurns[step-1] && turn === f0 && turn === f1) continue;
-                          if (turn === f0 && turn === f1 && turn === f2) continue;
-                      }
-                  }
-
-                  const transOffset = (cdir << 1) | turnIdx;
-                  const nx = x + TRANS_DX[transOffset], ny = y + TRANS_DY[transOffset];
-                  if (Math.abs(nx) > R || Math.abs(ny) > R) continue;
-                  const nidx = getIdx(nx, ny);
-                  if (obstacleMap[nidx] === 1) continue;
-                  const isHomeStep = (step === totalSteps - 1 && nx === 0 && ny === 0);
-                  if (visited[nidx] === 1 && !isHomeStep) continue;
-
-                  let newMask = unvisitedMask;
-                  if (targetBitMap[nidx] !== -1) {
-                      const bit = 1 << targetBitMap[nidx];
-                      if ((unvisitedMask & bit) !== 0) newMask = unvisitedMask & ~bit;
-                      else continue;
-                  }
-                  if (!isHomeStep) visited[nidx] = 1;
-                  pathTurns[step] = turn;
-                  dfs(step + 1, nx, ny, TRANS_NDIR[transOffset], leftRem - (turn === 1 ? 1 : 0), rightRem - (turn === -1 ? 1 : 0), newMask, startDir);
-                  if (!isHomeStep) visited[nidx] = 0;
-              }
-          }
-
-          const startDirs = [0, 1, 2, 3];
-          for (let i = startDirs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [startDirs[i], startDirs[j]] = [startDirs[j], startDirs[i]]; }
-          const initialMask = (1 << K) - 1;
-          for (let s = 0; s < 4; s++) {
-              for (let q = 0; q < 2; q++) {
-                  visited.fill(0); visited[getIdx(0, 0)] = 1;
-                  dfs(0, 0, 0, startDirs[s], quotas[q][0], quotas[q][1], initialMask, startDirs[s]);
-                  if (isCapped && validPaths.length > 0) break;
-              }
-              if (isCapped && validPaths.length > 0) break;
-          }
-          if (validPaths.length === 0) return { status: "error", nodes: [], msg: "❌ 找不到合法迴路。" };
-          for (let i = validPaths.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [validPaths[i], validPaths[j]] = [validPaths[j], validPaths[i]]; }
-          return { status: "success", data: validPaths };
-      }
-      self.onmessage = function(e) {
-          const t0 = performance.now();
-          const res = solveTwistyTurnyOptimized(e.data.steps, e.data.targets, e.data.obstacles, e.data.limit);
-          res.elapsed_ms = performance.now() - t0;
-          self.postMessage(res);
-      };
-  `;
-  const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
-  const workerUrl = URL.createObjectURL(workerBlob);
-
-  /* =========================================================================
-     2. 2D 幾何 SVG 生成 (已修正奇偶判定法則)
-  ========================================================================= */
-  const MAIN_TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
-  const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
-  const MAIN_TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
-
-  function generateSvgPath(currDirStart, pathTurns) {
-      let svgD = "M 0 0", cx = 0, cy = 0, cdir = currDirStart;
-      for (let i = 0; i < pathTurns.length; i++) {
-          const transOffset = (cdir << 1) | (pathTurns[i] === 1 ? 0 : 1);
-          cx += MAIN_TRANS_DX[transOffset]; cy += MAIN_TRANS_DY[transOffset]; cdir = MAIN_TRANS_NDIR[transOffset];
-          svgD += ` A 1 1 0 0 ${pathTurns[i] === 1 ? 1 : 0} ${cx} ${cy}`;
-      }
-      return svgD;
-  }
-  
-  function renderSvgGrid(minX, maxX, minY, maxY, padding) {
-      let grid = '';
-      const sX = Math.floor(minX - padding), eX = Math.ceil(maxX + padding), sY = Math.floor(minY - padding), eY = Math.ceil(maxY + padding);
-      for (let i = sY; i <= eY; i++) grid += `<line x1="${sX}" y1="${i}" x2="${eX}" y2="${i}" stroke="#e0e0e0" stroke-width="0.05"/>`;
-      for (let i = sX; i <= eX; i++) grid += `<line x1="${i}" y1="${sY}" x2="${i}" y2="${eY}" stroke="#e0e0e0" stroke-width="0.05"/>`;
-      return grid;
-  }
-  
-  function getBounds(startDir, pathTurns, targets, obstacles) {
-      let minX = 0, maxX = 0, minY = 0, maxY = 0, cx = 0, cy = 0, cdir = startDir;
-      for (let i = 0; i < pathTurns.length; i++) {
-          const transOffset = (cdir << 1) | (pathTurns[i] === 1 ? 0 : 1);
-          cx += MAIN_TRANS_DX[transOffset]; cy += MAIN_TRANS_DY[transOffset]; cdir = MAIN_TRANS_NDIR[transOffset];
-          if (cx < minX) minX = cx; if (cx > maxX) maxX = cx; if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-      }
-      targets.concat(obstacles).forEach(p => {
-          if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0]; if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
-      });
-      return { minX, maxX, minY, maxY };
-  }
-
-  function renderSvgFeatures(targets, obstacles) {
-      let feats = `<circle cx="0" cy="0" r="0.25" fill="#222"/>`;
-      targets.forEach(t => {
-          const cx = t[0], cy = t[1];
-          const starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
-          feats += `<polygon points="${starPoints}" fill="gold" stroke="#c69500" stroke-width="0.05" stroke-linejoin="round"/>`;
-      });
-      obstacles.forEach(o => {
-          feats += `<line x1="${o[0]-0.3}" y1="${o[1]-0.3}" x2="${o[0]+0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
-          feats += `<line x1="${o[0]+0.3}" y1="${o[1]-0.3}" x2="${o[0]-0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
-      });
-      return feats;
-  }
-
-  function renderBlueprintCell(x, y, logicalIdx, pathTurns, cellSize) {
-      const isTurnCell = (logicalIdx % 2 === 1);
-      let svg = "";
-      if (!isTurnCell) {
-          svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="#f8f9fa" stroke="#222" stroke-width="1.5"/>`;
-          svg += `<text x="${x + 4}" y="${y + cellSize*0.35}" font-family="monospace" font-size="${cellSize*0.25}" fill="#888">#${Math.floor(logicalIdx/2)+1}</text>`;
-          svg += `<circle cx="${x + cellSize/2}" cy="${y + cellSize/2}" r="2" fill="#aaa"/>`;
-      } else {
-          const turnIdx = Math.floor(logicalIdx / 2);
-          const isLeft = (pathTurns[turnIdx] === 1);
-          const isEvenStep = (turnIdx % 2 === 0);
-          const bgFill = isLeft ? "#e7f1ff" : "#ffeef0";
-          const strokeCol = isLeft ? "#0066cc" : "#dc3545";
-          
-          svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
-          const isBackslash = (!isLeft && isEvenStep) || (isLeft && !isEvenStep);
-          if (isBackslash) {
-              svg += `<line x1="${x}" y1="${y}" x2="${x + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
-              svg += `<text x="${x + cellSize*0.6}" y="${y + cellSize*0.4}" font-family="sans-serif" font-size="${cellSize*0.35}" font-weight="bold" fill="${strokeCol}">${isLeft?'L':'R'}</text>`;
-          } else {
-              svg += `<line x1="${x}" y1="${y + cellSize}" x2="${x + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
-              svg += `<text x="${x + cellSize*0.1}" y="${y + cellSize*0.4}" font-family="sans-serif" font-size="${cellSize*0.35}" font-weight="bold" fill="${strokeCol}">${isLeft?'L':'R'}</text>`;
-          }
-      }
-      return svg;
-  }
-
-  function generatePreviewStripSvg(pathTurns) {
-      const N = pathTurns.length, totalSquares = 2 * N, cellSize = 50, marginY = 5, marginX = 2;
-      const svgWidth = marginX * 2 + totalSquares * cellSize + 25, svgHeight = marginY * 2 + cellSize;
-      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="height: 100%; width: auto;">`;
-      for (let i = 0; i < totalSquares; i++) {
-          svg += renderBlueprintCell(marginX + i * cellSize, marginY, i, pathTurns, cellSize);
-          if (i === totalSquares - 1) {
-              const tx = marginX + i * cellSize + cellSize;
-              svg += `<polygon points="${tx},${marginY} ${tx+20},${marginY+10} ${tx+20},${marginY+cellSize-10} ${tx},${marginY+cellSize}" fill="#e9ecef" stroke="#222" stroke-width="1.5" stroke-dasharray="3,2"/>`;
-              svg += `<text x="${tx+4}" y="${marginY+cellSize/2+4}" font-family="sans-serif" font-size="11" fill="#555">黏</text>`;
-          }
-      }
-      return svg + `</svg>`;
-  }
-
-  function generatePrintStripSvg(pathTurns, title) {
-      const N = pathTurns.length, totalSquares = 2 * N, cellSize = 45, maxCols = 15;
-      const marginX = 40, marginY = 80, rowGap = 35;
-      const rowsCount = Math.ceil(totalSquares / maxCols);
-      const svgWidth = marginX * 2 + maxCols * cellSize + 50, svgHeight = marginY * 2 + rowsCount * (cellSize + rowGap);
-      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}"><rect width="100%" height="100%" fill="#ffffff"/>`;
-      svg += `<text x="${marginX}" y="35" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 列印藍圖 (${title} / 步數 N=${N})</text>`;
-      svg += `<text x="${marginX}" y="60" font-family="sans-serif" font-size="13" fill="#555">每行最高 15 格。行末附有梯形黏貼區供下一行黏貼銜接。（※ 摺線方向已自動補償紙張正反翻面）</text>`;
-
-      let currentGlobalIdx = 0;
-      for (let r = 0; r < rowsCount; r++) {
-          const y = marginY + r * (cellSize + rowGap);
-          let currentX = marginX;
-          let rowCellsCount = Math.min(maxCols, totalSquares - currentGlobalIdx);
-          for (let c = 0; c < rowCellsCount; c++) {
-              const logicalIdx = currentGlobalIdx + c;
-              svg += renderBlueprintCell(currentX, y, logicalIdx, pathTurns, cellSize);
-              if (c === rowCellsCount - 1) {
-                  const tx = currentX + cellSize;
-                  svg += `<polygon points="${tx},${y} ${tx+20},${y+8} ${tx+20},${y+cellSize-8} ${tx},${y+cellSize}" fill="#e9ecef" stroke="#222" stroke-width="1.5" stroke-dasharray="3,2"/>`;
-                  svg += `<text x="${tx+2}" y="${y+cellSize/2+4}" font-family="sans-serif" font-size="10" fill="#555">${logicalIdx < totalSquares-1 ? '塗膠水' : '閉合'}</text>`;
-              }
-              currentX += cellSize;
-          }
-          currentGlobalIdx += rowCellsCount;
-      }
-      return svg + `</svg>`;
-  }
-
-  /* =========================================================================
-     3. Three.js 3D 摺紙模擬器 (修復 Canvas 長寬為 0 的 Bug)
-  ========================================================================= */
-  let scene, camera, renderer, controls;
-  let animHinges = [], isAnimPlaying = false, totalFolds = 0, currentPathTurns = null;
-  let finalBoundingBox = new THREE.Box3(); 
-
-  function init3DScene() {
-      const container = document.getElementById('modal-right');
-      if (!renderer) {
-          scene = new THREE.Scene();
-          scene.background = new THREE.Color(0x222222);
-
-          camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 1, 5000);
-          renderer = new THREE.WebGLRenderer({ antialias: true });
-          container.insertBefore(renderer.domElement, container.firstChild);
-
-          controls = new OrbitControls(camera, renderer.domElement);
-          controls.enableDamping = true;
-          controls.dampingFactor = 0.1;
-          
-          const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-          scene.add(ambientLight);
-          const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-          dirLight.position.set(100, 200, 300);
-          scene.add(dirLight);
-
-          // 增加 3D 地板網格，讓畫面更有空間感
-          const grid = new THREE.GridHelper(2000, 50, 0x555555, 0x333333);
-          grid.rotation.x = Math.PI / 2;
-          grid.position.z = -20; // 稍微放在紙帶後面
-          scene.add(grid);
-
-          window.addEventListener('resize', () => {
-              if (document.getElementById('modal-overlay').style.display === 'none') return;
-              camera.aspect = container.clientWidth / container.clientHeight;
-              camera.updateProjectionMatrix();
-              renderer.setSize(container.clientWidth, container.clientHeight);
-          });
-
-          controls.addEventListener('start', () => { isAnimPlaying = false; syncPlayButtonUI(); });
-          requestAnimationFrame(render3DLoop);
-      }
-      
-      // 修復核心：每次打開視窗時強制更新渲染器尺寸，防止出現 0x0 黑畫面
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-  }
-
-  function createPaperTexture(text, isTurn, isBackslash, colorStr) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 256; canvas.height = 256;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = isTurn ? (text === 'L' ? '#e7f1ff' : '#ffeef0') : '#f8f9fa';
-      ctx.fillRect(0,0,256,256);
-      ctx.strokeStyle = '#222'; ctx.lineWidth = 6; ctx.strokeRect(0,0,256,256);
-      if (isTurn) {
-          ctx.strokeStyle = colorStr; ctx.lineWidth = 10; ctx.setLineDash([20, 15]);
-          ctx.beginPath();
-          if (isBackslash) { ctx.moveTo(0,0); ctx.lineTo(256,256); }
-          else { ctx.moveTo(0,256); ctx.lineTo(256,0); }
-          ctx.stroke();
-      }
-      ctx.fillStyle = colorStr || '#888'; ctx.font = 'bold 90px sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(text, 128, 128);
-      return new THREE.CanvasTexture(canvas);
-  }
-
-  function createDoubleSidedTriangle(p1, p2, p3, baseZOffset, frontTex) {
-      const group = new THREE.Group();
-      const fGeom = new THREE.BufferGeometry();
-      fGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p1, ...p2, ...p3]), 3));
-      const uvs = new Float32Array([ p1[0]/40, p1[1]/40+0.5, p2[0]/40, p2[1]/40+0.5, p3[0]/40, p3[1]/40+0.5 ]);
-      fGeom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-      fGeom.computeVertexNormals();
-
-      const bGeom = new THREE.BufferGeometry();
-      bGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p1, ...p3, ...p2]), 3)); 
-      bGeom.computeVertexNormals();
-
-      const fMat = new THREE.MeshLambertMaterial({ map: frontTex, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: baseZOffset });
-      const bMat = new THREE.MeshLambertMaterial({ color: 0x90a4ae, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: baseZOffset + 0.1 });
-      
-      group.add(new THREE.Mesh(fGeom, fMat));
-      group.add(new THREE.Mesh(bGeom, bMat));
-
-      const edges = new THREE.EdgesGeometry(fGeom);
-      group.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 })));
-      
-      return group;
-  }
-
-  function build3DStrip(pathTurns) {
-      const oldStrip = scene.getObjectByName('stripRoot');
-      if (oldStrip) scene.remove(oldStrip);
-
-      const L = 40;
-      animHinges = [];
-      const stripRoot = new THREE.Group();
-      stripRoot.name = 'stripRoot';
-      scene.add(stripRoot);
-
-      let currentParent = stripRoot;
-
-      for (let i = 0; i < pathTurns.length * 2; i++) {
-          const zOffset = -i; 
-          
-          if (i % 2 === 0) {
-              const stepNum = Math.floor(i / 2) + 1;
-              const tex = createPaperTexture('#' + stepNum, false, false, '#888');
-              const cellGroup = new THREE.Group();
-              
-              const tri1 = createDoubleSidedTriangle([0, L/2, 0], [0, -L/2, 0], [L, L/2, 0], zOffset, tex);
-              const tri2 = createDoubleSidedTriangle([L, -L/2, 0], [L, L/2, 0], [0, -L/2, 0], zOffset, tex);
-              cellGroup.add(tri1, tri2);
-
-              const nextAnchor = new THREE.Group();
-              nextAnchor.position.set(L, 0, 0);
-              cellGroup.add(nextAnchor);
-
-              currentParent.add(cellGroup);
-              currentParent = nextAnchor;
-          } else {
-              const turnIdx = Math.floor(i / 2);
-              const isLeft = (pathTurns[turnIdx] === 1);
-              const isEvenStep = (turnIdx % 2 === 0);
-              const isBackslash = (!isLeft && isEvenStep) || (isLeft && !isEvenStep);
-              const tex = createPaperTexture(isLeft ? 'L' : 'R', true, isBackslash, isLeft ? '#0066cc' : '#dc3545');
-
-              const turnGroup = new THREE.Group();
-              const hinge = new THREE.Group();
-              const nextAnchor = new THREE.Group();
-
-              if (isBackslash) {
-                  const tri1 = createDoubleSidedTriangle([0, L/2, 0], [0, -L/2, 0], [L, -L/2, 0], zOffset, tex);
-                  hinge.position.set(0, L/2, 0); 
-                  hinge.userData = { axis: new THREE.Vector3(1, -1, 0).normalize() };
-                  
-                  const tri2 = createDoubleSidedTriangle([0, 0, 0], [L, -L, 0], [L, 0, 0], zOffset, tex);
-                  hinge.add(tri2);
-                  nextAnchor.position.set(L, -L/2, 0); 
-              } else {
-                  const tri1 = createDoubleSidedTriangle([0, -L/2, 0], [L, L/2, 0], [0, L/2, 0], zOffset, tex);
-                  hinge.position.set(0, -L/2, 0); 
-                  hinge.userData = { axis: new THREE.Vector3(1, 1, 0).normalize() };
-                  
-                  const tri2 = createDoubleSidedTriangle([0, 0, 0], [L, 0, 0], [L, L, 0], zOffset, tex);
-                  hinge.add(tri2);
-                  nextAnchor.position.set(L, L/2, 0); 
-              }
-
-              turnGroup.add(tri1);
-              turnGroup.add(hinge);
-              hinge.add(nextAnchor);
-
-              animHinges.push(hinge);
-              currentParent.add(turnGroup);
-              currentParent = nextAnchor;
-          }
-      }
-      return stripRoot;
-  }
-
-  function applyFolds(progress) {
-      for (let i = 0; i < totalFolds; i++) {
-          let foldAmount = Math.max(0, Math.min(1, progress - i));
-          foldAmount = foldAmount < 0.5 ? 2 * foldAmount * foldAmount : -1 + (4 - 2 * foldAmount) * foldAmount;
-          const angle = foldAmount * Math.PI; 
-          animHinges[i].setRotationFromAxisAngle(animHinges[i].userData.axis, angle);
-      }
-  }
-
-  function render3DLoop() {
-      if (isAnimPlaying) {
-          const slider = document.getElementById('anim-slider');
-          slider.value = Number(slider.value) + 0.03; 
-          
-          if (slider.value >= totalFolds) {
-              slider.value = totalFolds;
-              isAnimPlaying = false;
-              syncPlayButtonUI();
-              
-              if (finalBoundingBox && !finalBoundingBox.isEmpty()) {
-                  const center = new THREE.Vector3();
-                  finalBoundingBox.getCenter(center);
-                  const size = new THREE.Vector3();
-                  finalBoundingBox.getSize(size);
-                  const maxDim = Math.max(size.x, size.y, size.z);
-                  
-                  camera.position.lerp(new THREE.Vector3(center.x, center.y, maxDim * 1.5 + 50), 0.05);
-                  controls.target.lerp(center, 0.05);
-              }
-          } else {
-              const activeIdx = Math.floor(slider.value);
-              if (animHinges[activeIdx]) {
-                  const targetPos = new THREE.Vector3();
-                  animHinges[activeIdx].getWorldPosition(targetPos);
-                  controls.target.lerp(targetPos, 0.1);
-              }
-          }
-      }
-      
-      if (document.getElementById('anim-slider')) {
-          applyFolds(Number(document.getElementById('anim-slider').value));
-      }
-      
-      controls.update();
-      renderer.render(scene, camera);
-      requestAnimationFrame(render3DLoop);
-  }
-
-  function syncPlayButtonUI() { document.getElementById('btn-play').innerText = isAnimPlaying ? "⏸" : "▶"; }
-
-  /* =========================================================================
-     4. UI 事件與調度邏輯
-  ========================================================================= */
-  let cellStates = {}, debounceTimer, activeWorker = null, queryCache = new Map();
-
-  function toggleNode(x, y, el) {
-      if (x === 0 && y === 0) return;
-      const key = `${x},${y}`;
-      let st = cellStates[key] || 0;
-      st = (st + 1) % 3;
-      if (st === 0) delete cellStates[key]; else cellStates[key] = st;
-      el.className = 'node valid-parity'; el.innerHTML = '';
-      if (st === 1) { el.classList.add('target'); el.innerHTML = '⭐'; }
-      if (st === 2) { el.classList.add('obstacle'); el.innerHTML = '❌'; }
-      autoRun();
-  }
-
-  function initGrid(forceClear = false) {
-      if (forceClear) cellStates = {};
-      const steps = parseInt(document.getElementById('stepsInput').value, 10);
-      const R = Math.floor(steps / 2);
-      const board = document.getElementById('board');
-      const axisX = document.getElementById('axis-x-inner'), axisY = document.getElementById('axis-y-inner');
-      const svgOverlay = document.getElementById('svg-overlay');
-
-      const boardSize = 2 * R + 1;
-      board.style.width = `calc(${boardSize} * var(--cell))`; board.style.height = `calc(${boardSize} * var(--cell))`;
-      svgOverlay.setAttribute('viewBox', `-${R + 0.5} -${R + 0.5} ${boardSize} ${boardSize}`);
-      
-      document.getElementById('svg-path').setAttribute('d', '');
-      document.getElementById('results-container').innerHTML = '';
-      document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
-
-      Array.from(board.children).forEach(c => { if (c.id !== 'svg-overlay') board.removeChild(c); });
-      axisX.innerHTML = ''; axisY.innerHTML = '';
-
-      for (let x = -R; x <= R; x++) { const lx = document.createElement('div'); lx.className = 'axis-label-x'; lx.style.left = `calc(${x + R + 0.5} * var(--cell) + 15px)`; lx.innerText = x; axisX.appendChild(lx); }
-      for (let y = R; y >= -R; y--) { const ly = document.createElement('div'); ly.className = 'axis-label-y'; ly.style.top = `calc(${R - y + 0.5} * var(--cell) + 15px)`; ly.innerText = y; axisY.appendChild(ly); }
-
-      for (let y = R; y >= -R; y--) {
-          for (let x = -R; x <= R; x++) {
-              const node = document.createElement('div');
-              node.className = 'node'; node.dataset.coord = `${x},${y}`;
-              node.style.left = `calc(${x + R + 0.5} * var(--cell))`; node.style.top = `calc(${R - y + 0.5} * var(--cell))`;
-              if ((Math.abs(x) + Math.abs(y)) % 2 !== 0) node.classList.add('invalid-parity');
-              else {
-                  node.classList.add('valid-parity');
-                  if (x === 0 && y === 0) { node.classList.add('center'); node.innerHTML = '🏠'; }
-                  else {
-                      if (cellStates[`${x},${y}`] === 1) { node.classList.add('target'); node.innerHTML = '⭐'; }
-                      if (cellStates[`${x},${y}`] === 2) { node.classList.add('obstacle'); node.innerHTML = '❌'; }
-                      node.onclick = () => toggleNode(x, y, node);
-                  }
-              }
-              board.appendChild(node);
-          }
-      }
-  }
-
-  function handleWorkerResult(result, limit, targets, obstacles) {
-      const statusText = document.getElementById('statusText');
-      if (result.status === 'success') {
-          const chosenPaths = result.data.slice(0, limit);
-          statusText.innerText = `✅ 找到 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
-          statusText.style.color = "#28a745";
-          
-          // 確保主網格藍色線條成功畫出
-          document.getElementById('svg-path').setAttribute('d', generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]));
-
-          const resDiv = document.getElementById('results-container');
-          resDiv.innerHTML = '';
-          const featsHtml = renderSvgFeatures(targets, obstacles);
-          const tStr = targets.length > 0 ? targets.map(t => `<span class="coord-tag">(${t[0]}, ${t[1]})</span>`).join('') : "無";
-          const oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : "無";
-
-          chosenPaths.forEach((pathObj, idx) => {
-              const pathTurns = pathObj[1];
-              const svg_d = generateSvgPath(pathObj[0], pathTurns);
-              const bounds = getBounds(pathObj[0], pathTurns, targets, obstacles);
-              const P = 1.0;
-              const viewBox = `${bounds.minX - P} ${bounds.minY - P} ${bounds.maxX - bounds.minX + 2 * P} ${bounds.maxY - bounds.minY + 2 * P}`;
-              const gridHtml = renderSvgGrid(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, P);
-
-              const card = document.createElement('div'); card.className = 'thumb-card';
-              card.onclick = () => openModal(svg_d, `Result ${idx + 1}`, `<div><strong>⭐ 目標：</strong>${tStr}</div><div><strong>❌ 障礙：</strong>${oStr}</div>`, viewBox, gridHtml, featsHtml, pathTurns);
-              card.innerHTML = `<svg class="thumb-svg" viewBox="${viewBox}">${gridHtml}<path d="${svg_d}" fill="none" stroke="#007bff" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>${featsHtml}</svg><div class="thumb-title">Result ${idx + 1}</div>`;
-              resDiv.appendChild(card);
-          });
-      } else {
-          statusText.innerText = `${result.msg} (${result.elapsed_ms.toFixed(1)}ms)`;
-          statusText.style.color = "#dc3545";
-          if (result.nodes) result.nodes.forEach(coordStr => { const errNode = document.querySelector(`[data-coord="${coordStr}"]`); if (errNode) errNode.classList.add('error-pulse'); });
-      }
-  }
-
-  function autoRun() {
-      clearTimeout(debounceTimer);
-      if (activeWorker) { activeWorker.terminate(); activeWorker = null; }
-      document.getElementById('statusText').innerHTML = "<span class='loader'></span> 深度搜尋中，請稍候...";
-      document.getElementById('statusText').style.color = "#007bff";
-      document.getElementById('svg-path').setAttribute('d', '');
-      document.getElementById('results-container').innerHTML = '';
-      document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
-
-      debounceTimer = setTimeout(() => {
-          const steps = parseInt(document.getElementById('stepsInput').value, 10), limit = parseInt(document.getElementById('limitInput').value, 10);
-          const targets = [], obstacles = [];
-          for (const k in cellStates) {
-              const p = k.split(',');
-              if (cellStates[k] === 1) targets.push([parseInt(p[0], 10), parseInt(p[1], 10)]);
-              if (cellStates[k] === 2) obstacles.push([parseInt(p[0], 10), parseInt(p[1], 10)]);
-          }
-          const cacheKey = `${steps}_${limit}_${JSON.stringify(targets)}_${JSON.stringify(obstacles)}`;
-          if (queryCache.has(cacheKey)) handleWorkerResult(queryCache.get(cacheKey), limit, targets, obstacles);
-          else {
-              activeWorker = new Worker(workerUrl);
-              activeWorker.onmessage = function(e) {
-                  if (e.data.status === 'success') { if (queryCache.size > 20) queryCache.delete(queryCache.keys().next().value); queryCache.set(cacheKey, e.data); }
-                  handleWorkerResult(e.data, limit, targets, obstacles);
-                  activeWorker = null;
-              };
-              activeWorker.postMessage({ steps, targets, obstacles, limit });
-          }
-      }, 50);
-  }
-
-  window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml, pathTurns) {
-      document.getElementById('modal-title').innerText = title;
-      document.querySelector('.modal-svg').setAttribute('viewBox', viewBox);
-      document.getElementById('modal-svg-content').innerHTML = `${gridHtml}<path d="${svgPathD}" fill="none" stroke="#007bff" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.4));"/>${featsHtml}`;
-      document.getElementById('strip-preview-container').innerHTML = generatePreviewStripSvg(pathTurns);
-      
-      document.getElementById('btn-print-blueprint').onclick = function() {
-          if (typeof gtag === 'function') gtag('event', 'export_blueprint', { 'steps': pathTurns.length });
-          document.getElementById('print-area').innerHTML = generatePrintStripSvg(pathTurns, title);
-          window.print();
-      };
-
-      // 顯示視窗
-      document.getElementById('modal-overlay').style.display = 'flex';
-      
-      // 關鍵修復：延遲 100ms 讓瀏覽器計算完佈局，再啟動 3D，徹底解決 0x0 破圖黑畫面 bug
-      setTimeout(() => {
-          init3DScene();
-          currentPathTurns = pathTurns;
-          totalFolds = pathTurns.length;
-          
-          const stripRoot = build3DStrip(pathTurns);
-          
-          applyFolds(totalFolds);
-          stripRoot.updateMatrixWorld(true);
-          finalBoundingBox.setFromObject(stripRoot);
-          
-          applyFolds(0);
-          const slider = document.getElementById('anim-slider');
-          slider.max = totalFolds;
-          slider.value = 0;
-          
-          camera.position.set(-100, -100, 300);
-          controls.target.set(0, 0, 0);
-          
-          isAnimPlaying = true;
-          syncPlayButtonUI();
-      }, 100);
-  };
-
-  window.closeModal = function() {
-      document.getElementById('modal-overlay').style.display = 'none';
-      isAnimPlaying = false;
-  };
-
-  document.getElementById('btn-play').onclick = function() {
-      if (document.getElementById('anim-slider').value >= totalFolds) document.getElementById('anim-slider').value = 0;
-      isAnimPlaying = !isAnimPlaying;
-      syncPlayButtonUI();
-  };
-
-  initGrid(false); autoRun();
+/* =========================================================================
+   1. Web Worker 背景尋路引擎 (完整未壓縮版)
+========================================================================= */
+const workerCode = `
+    const TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
+    const TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
+    const TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
+
+    function solveTwistyTurnyOptimized(totalSteps, rawTargets, rawObstacles, requiredCount) {
+        const R = Math.floor(totalSteps / 2);
+        const W = 2 * R + 1;
+        const totalCells = W * W;
+        const getIdx = (x, y) => (y + R) * W + (x + R);
+        
+        const targets = [];
+        for (let i = 0; i < rawTargets.length; i++) {
+            if (rawTargets[i][0] !== 0 || rawTargets[i][1] !== 0) targets.push(rawTargets[i]);
+        }
+        const K = targets.length;
+        if (K > 20) return { status: "error", nodes: [], msg: "❌ 目標過多 (上限 20)！" };
+
+        const obstacleMap = new Uint8Array(totalCells);
+        for (let i = 0; i < rawObstacles.length; i++) {
+            if (Math.abs(rawObstacles[i][0]) <= R && Math.abs(rawObstacles[i][1]) <= R) {
+                obstacleMap[getIdx(rawObstacles[i][0], rawObstacles[i][1])] = 1;
+            }
+        }
+        if (obstacleMap[getIdx(0, 0)] === 1) return { status: "error", nodes: ["0,0"], msg: "❌ 起點有障礙物！" };
+
+        for (let i = 0; i < K; i++) {
+            const tx = targets[i][0], ty = targets[i][1];
+            if (Math.abs(tx) > R || Math.abs(ty) > R) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標超出範圍！" };
+            if (obstacleMap[getIdx(tx, ty)] === 1) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標與障礙重疊！" };
+            if ((Math.abs(tx) + Math.abs(ty)) % 2 !== 0) return { status: "error", nodes: [tx + "," + ty], msg: "❌ 目標奇偶性錯誤！" };
+        }
+
+        const dist = (x1, y1, x2, y2) => Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
+        const P = K + 1;
+        const distMat = new Int32Array(P * P);
+        const ptsX = new Int32Array(P), ptsY = new Int32Array(P);
+        ptsX[0] = 0; ptsY[0] = 0;
+        
+        for (let i = 0; i < K; i++) { 
+            ptsX[i + 1] = targets[i][0]; 
+            ptsY[i + 1] = targets[i][1]; 
+        }
+        
+        for (let i = 0; i < P; i++) {
+            for (let j = 0; j < P; j++) {
+                distMat[i * P + j] = dist(ptsX[i], ptsY[i], ptsX[j], ptsY[j]);
+            }
+        }
+
+        const numMasks = 1 << K;
+        const dp = new Int32Array(numMasks * K);
+        dp.fill(-1);
+
+        function getTspDist(mask, lastIdx) {
+            if (mask === 0) return distMat[(lastIdx + 1) * P + 0];
+            const memoKey = mask * K + lastIdx;
+            if (dp[memoKey] !== -1) return dp[memoKey];
+            let minVal = 1e9;
+            for (let next = 0; next < K; next++) {
+                if ((mask & (1 << next)) !== 0) {
+                    const cost = distMat[(lastIdx + 1) * P + (next + 1)] + getTspDist(mask & ~(1 << next), next);
+                    if (cost < minVal) minVal = cost;
+                }
+            }
+            dp[memoKey] = minVal; 
+            return minVal;
+        }
+
+        let minRequired = 0;
+        if (K > 0) {
+            minRequired = 1e9;
+            for (let first = 0; first < K; first++) {
+                const cost = distMat[0 * P + (first + 1)] + getTspDist((numMasks - 1) & ~(1 << first), first);
+                if (cost < minRequired) minRequired = cost;
+            }
+        }
+        if (minRequired > totalSteps) return { status: "error", nodes: targets.map(t => t[0] + "," + t[1]), msg: "❌ 步數不足，最少需 " + minRequired + " 步。" };
+
+        const qX = new Int32Array(totalCells), qY = new Int32Array(totalCells), flooded = new Uint8Array(totalCells);
+        let qHead = 0, qTail = 0;
+        qX[qTail] = 0; qY[qTail] = 0; qTail++; flooded[getIdx(0, 0)] = 1;
+        const fdx = [-1, 1, -1, 1], fdy = [1, 1, -1, -1];
+        
+        while (qHead < qTail) {
+            const cx = qX[qHead], cy = qY[qHead]; qHead++;
+            for (let d = 0; d < 4; d++) {
+                const nx = cx + fdx[d], ny = cy + fdy[d];
+                if (Math.abs(nx) <= R && Math.abs(ny) <= R) {
+                    const nidx = getIdx(nx, ny);
+                    if (flooded[nidx] === 0 && obstacleMap[nidx] === 0) { 
+                        flooded[nidx] = 1; qX[qTail] = nx; qY[qTail] = ny; qTail++; 
+                    }
+                }
+            }
+        }
+        for (let i = 0; i < K; i++) {
+            if (flooded[getIdx(targets[i][0], targets[i][1])] === 0) {
+                return { status: "error", nodes: [targets[i][0] + "," + targets[i][1]], msg: "❌ 目標被死胡同包圍！" };
+            }
+        }
+
+        const targetBitMap = new Int8Array(totalCells);
+        targetBitMap.fill(-1);
+        for (let i = 0; i < K; i++) targetBitMap[getIdx(targets[i][0], targets[i][1])] = i;
+
+        const visited = new Uint8Array(totalCells);
+        visited[getIdx(0, 0)] = 1;
+        const pathTurns = new Int8Array(totalSteps);
+        const validPaths = [];
+        const seenFootprints = new Set();
+        const quotas = [[Math.floor((totalSteps + 4) / 2), Math.floor((totalSteps - 4) / 2)], [Math.floor((totalSteps - 4) / 2), Math.floor((totalSteps + 4) / 2)]];
+        let isCapped = false;
+        const targetSearchLimit = Math.max(10, requiredCount * 2);
+
+        function estimateLowerBound(cx, cy, mask) {
+            if (mask === 0) return Math.max(Math.abs(cx), Math.abs(cy));
+            let minVal = 1e9;
+            for (let next = 0; next < K; next++) {
+                if ((mask & (1 << next)) !== 0) {
+                    const cost = dist(cx, cy, ptsX[next + 1], ptsY[next + 1]) + getTspDist(mask & ~(1 << next), next);
+                    if (cost < minVal) minVal = cost;
+                }
+            }
+            return minVal;
+        }
+
+        function dfs(step, x, y, cdir, leftRem, rightRem, unvisitedMask, startDir) {
+            if (isCapped || validPaths.length >= targetSearchLimit) { isCapped = true; return; }
+            if (totalSteps - step < estimateLowerBound(x, y, unvisitedMask)) return;
+
+            if (step === totalSteps) {
+                if (x === 0 && y === 0 && unvisitedMask === 0) {
+                    if (totalSteps > 4) {
+                        let c0 = pathTurns[0], c1 = pathTurns[1], c2 = pathTurns[2];
+                        let e0 = pathTurns[totalSteps - 3], e1 = pathTurns[totalSteps - 2], e2 = pathTurns[totalSteps - 1];
+                        if ((e0 === e1 && e1 === e2 && e2 === c0) || (e1 === e2 && e2 === c0 && c0 === c1) || (e2 === c0 && c0 === c1 && c1 === c2)) return;
+                    }
+                    let fpCx = 0, fpCy = 0, fpCdir = startDir, edges = [];
+                    for (let i = 0; i < totalSteps; i++) {
+                        const transOffset = (fpCdir << 1) | (pathTurns[i] === 1 ? 0 : 1);
+                        const nx = fpCx + TRANS_DX[transOffset], ny = fpCy + TRANS_DY[transOffset];
+                        fpCdir = TRANS_NDIR[transOffset];
+                        const p1 = (fpCx + 50) | ((fpCy + 50) << 7), p2 = (nx + 50) | ((ny + 50) << 7);
+                        edges.push(p1 < p2 ? (p1 | (p2 << 14)) : (p2 | (p1 << 14)));
+                        fpCx = nx; fpCy = ny;
+                    }
+                    edges.sort((a, b) => a - b);
+                    const fp = edges.join(",");
+                    if (!seenFootprints.has(fp)) { 
+                        seenFootprints.add(fp); 
+                        validPaths.push([startDir, Array.from(pathTurns)]); 
+                    }
+                }
+                return;
+            }
+
+            let restricted = 0;
+            if (totalSteps > 4 && step >= 3) {
+                const t1 = pathTurns[step - 1];
+                if (t1 === pathTurns[step - 2] && t1 === pathTurns[step - 3]) restricted = t1;
+            }
+
+            for (let turnIdx = 0; turnIdx < 2; turnIdx++) {
+                const turn = turnIdx === 0 ? 1 : -1;
+                const rem = turn === 1 ? leftRem : rightRem;
+                if (rem <= 0 || turn === restricted) continue;
+                
+                if (totalSteps > 4 && step >= totalSteps - 3) {
+                    const f0 = pathTurns[0], f1 = pathTurns[1], f2 = pathTurns[2];
+                    if (step === totalSteps - 1) {
+                        if (turn === pathTurns[step-1] && turn === pathTurns[step-2] && turn === f0) continue;
+                        if (turn === pathTurns[step-1] && turn === f0 && turn === f1) continue;
+                        if (turn === f0 && turn === f1 && turn === f2) continue;
+                    }
+                }
+
+                const transOffset = (cdir << 1) | turnIdx;
+                const nx = x + TRANS_DX[transOffset], ny = y + TRANS_DY[transOffset];
+                
+                if (Math.abs(nx) > R || Math.abs(ny) > R) continue;
+                
+                const nidx = getIdx(nx, ny);
+                if (obstacleMap[nidx] === 1) continue;
+                
+                const isHomeStep = (step === totalSteps - 1 && nx === 0 && ny === 0);
+                if (visited[nidx] === 1 && !isHomeStep) continue;
+
+                let newMask = unvisitedMask;
+                if (targetBitMap[nidx] !== -1) {
+                    const bit = 1 << targetBitMap[nidx];
+                    if ((unvisitedMask & bit) !== 0) newMask = unvisitedMask & ~bit;
+                    else continue;
+                }
+                
+                if (!isHomeStep) visited[nidx] = 1;
+                pathTurns[step] = turn;
+                dfs(step + 1, nx, ny, TRANS_NDIR[transOffset], leftRem - (turn === 1 ? 1 : 0), rightRem - (turn === -1 ? 1 : 0), newMask, startDir);
+                if (!isHomeStep) visited[nidx] = 0;
+            }
+        }
+
+        const startDirs = [0, 1, 2, 3];
+        for (let i = startDirs.length - 1; i > 0; i--) { 
+            const j = Math.floor(Math.random() * (i + 1)); 
+            [startDirs[i], startDirs[j]] = [startDirs[j], startDirs[i]]; 
+        }
+        
+        const initialMask = (1 << K) - 1;
+        for (let s = 0; s < 4; s++) {
+            for (let q = 0; q < 2; q++) {
+                visited.fill(0); 
+                visited[getIdx(0, 0)] = 1;
+                dfs(0, 0, 0, startDirs[s], quotas[q][0], quotas[q][1], initialMask, startDirs[s]);
+                if (isCapped && validPaths.length > 0) break;
+            }
+            if (isCapped && validPaths.length > 0) break;
+        }
+        
+        if (validPaths.length === 0) return { status: "error", nodes: [], msg: "❌ 找不到合法迴路。" };
+        
+        for (let i = validPaths.length - 1; i > 0; i--) { 
+            const j = Math.floor(Math.random() * (i + 1)); 
+            [validPaths[i], validPaths[j]] = [validPaths[j], validPaths[i]]; 
+        }
+        return { status: "success", data: validPaths };
+    }
+
+    self.onmessage = function(e) {
+        const t0 = performance.now();
+        const res = solveTwistyTurnyOptimized(e.data.steps, e.data.targets, e.data.obstacles, e.data.limit);
+        res.elapsed_ms = performance.now() - t0;
+        self.postMessage(res);
+    };
+`;
+
+const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+const workerUrl = URL.createObjectURL(workerBlob);
+
+/* =========================================================================
+   2. 2D 幾何 SVG 生成與介面渲染
+========================================================================= */
+const MAIN_TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
+const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
+const MAIN_TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
+
+function generateSvgPath(currDirStart, pathTurns) {
+    let svgD = "M 0 0", cx = 0, cy = 0, cdir = currDirStart;
+    for (let i = 0; i < pathTurns.length; i++) {
+        const transOffset = (cdir << 1) | (pathTurns[i] === 1 ? 0 : 1);
+        cx += MAIN_TRANS_DX[transOffset]; 
+        cy += MAIN_TRANS_DY[transOffset]; 
+        cdir = MAIN_TRANS_NDIR[transOffset];
+        svgD += ` A 1 1 0 0 ${pathTurns[i] === 1 ? 1 : 0} ${cx} ${cy}`;
+    }
+    return svgD;
+}
+
+function renderSvgGrid(minX, maxX, minY, maxY, padding) {
+    let grid = '';
+    const sX = Math.floor(minX - padding), eX = Math.ceil(maxX + padding);
+    const sY = Math.floor(minY - padding), eY = Math.ceil(maxY + padding);
+    for (let i = sY; i <= eY; i++) grid += `<line x1="${sX}" y1="${i}" x2="${eX}" y2="${i}" stroke="#e0e0e0" stroke-width="0.05"/>`;
+    for (let i = sX; i <= eX; i++) grid += `<line x1="${i}" y1="${sY}" x2="${i}" y2="${eY}" stroke="#e0e0e0" stroke-width="0.05"/>`;
+    return grid;
+}
+
+function getBounds(startDir, pathTurns, targets, obstacles) {
+    let minX = 0, maxX = 0, minY = 0, maxY = 0, cx = 0, cy = 0, cdir = startDir;
+    for (let i = 0; i < pathTurns.length; i++) {
+        const transOffset = (cdir << 1) | (pathTurns[i] === 1 ? 0 : 1);
+        cx += MAIN_TRANS_DX[transOffset]; cy += MAIN_TRANS_DY[transOffset]; cdir = MAIN_TRANS_NDIR[transOffset];
+        if (cx < minX) minX = cx; if (cx > maxX) maxX = cx; if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+    }
+    targets.concat(obstacles).forEach(p => {
+        if (p[0] < minX) minX = p[0]; if (p[0] > maxX) maxX = p[0]; 
+        if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1];
+    });
+    return { minX, maxX, minY, maxY };
+}
+
+function renderSvgFeatures(targets, obstacles) {
+    let feats = `<circle cx="0" cy="0" r="0.25" fill="#222"/>`; // 原點
+    targets.forEach(t => {
+        const cx = t[0], cy = t[1];
+        // 畫星星
+        const starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
+        feats += `<polygon points="${starPoints}" fill="gold" stroke="#c69500" stroke-width="0.05" stroke-linejoin="round"/>`;
+    });
+    obstacles.forEach(o => {
+        // 畫叉叉
+        feats += `<line x1="${o[0]-0.3}" y1="${o[1]-0.3}" x2="${o[0]+0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
+        feats += `<line x1="${o[0]+0.3}" y1="${o[1]-0.3}" x2="${o[0]-0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
+    });
+    return feats;
+}
+
+function renderBlueprintCell(x, y, logicalIdx, pathTurns, cellSize) {
+    const isTurnCell = (logicalIdx % 2 === 1);
+    let svg = "";
+    if (!isTurnCell) {
+        svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="#f8f9fa" stroke="#222" stroke-width="1.5"/>`;
+        svg += `<text x="${x + 4}" y="${y + cellSize*0.35}" font-family="monospace" font-size="${cellSize*0.25}" fill="#888">#${Math.floor(logicalIdx/2)+1}</text>`;
+        svg += `<circle cx="${x + cellSize/2}" cy="${y + cellSize/2}" r="2" fill="#aaa"/>`;
+    } else {
+        const turnIdx = Math.floor(logicalIdx / 2);
+        const isLeft = (pathTurns[turnIdx] === 1);
+        const isEvenStep = (turnIdx % 2 === 0);
+        const bgFill = isLeft ? "#e7f1ff" : "#ffeef0";
+        const strokeCol = isLeft ? "#0066cc" : "#dc3545";
+        
+        svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
+        
+        // 關鍵：奇偶翻面修正法則
+        const isBackslash = (!isLeft && isEvenStep) || (isLeft && !isEvenStep);
+        if (isBackslash) {
+            svg += `<line x1="${x}" y1="${y}" x2="${x + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
+            svg += `<text x="${x + cellSize*0.6}" y="${y + cellSize*0.4}" font-family="sans-serif" font-size="${cellSize*0.35}" font-weight="bold" fill="${strokeCol}">${isLeft?'L':'R'}</text>`;
+        } else {
+            svg += `<line x1="${x}" y1="${y + cellSize}" x2="${x + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
+            svg += `<text x="${x + cellSize*0.1}" y="${y + cellSize*0.4}" font-family="sans-serif" font-size="${cellSize*0.35}" font-weight="bold" fill="${strokeCol}">${isLeft?'L':'R'}</text>`;
+        }
+    }
+    return svg;
+}
+
+function generatePreviewStripSvg(pathTurns) {
+    const N = pathTurns.length, totalSquares = 2 * N, cellSize = 50, marginY = 5, marginX = 2;
+    const svgWidth = marginX * 2 + totalSquares * cellSize + 25, svgHeight = marginY * 2 + cellSize;
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}" style="height: 100%; width: auto;">`;
+    for (let i = 0; i < totalSquares; i++) {
+        svg += renderBlueprintCell(marginX + i * cellSize, marginY, i, pathTurns, cellSize);
+        if (i === totalSquares - 1) {
+            const tx = marginX + i * cellSize + cellSize;
+            svg += `<polygon points="${tx},${marginY} ${tx+20},${marginY+10} ${tx+20},${marginY+cellSize-10} ${tx},${marginY+cellSize}" fill="#e9ecef" stroke="#222" stroke-width="1.5" stroke-dasharray="3,2"/>`;
+            svg += `<text x="${tx+4}" y="${marginY+cellSize/2+4}" font-family="sans-serif" font-size="11" fill="#555">黏</text>`;
+        }
+    }
+    return svg + `</svg>`;
+}
+
+function generatePrintStripSvg(pathTurns, title) {
+    const N = pathTurns.length, totalSquares = 2 * N, cellSize = 45, maxCols = 15;
+    const marginX = 40, marginY = 80, rowGap = 35;
+    const rowsCount = Math.ceil(totalSquares / maxCols);
+    const svgWidth = marginX * 2 + maxCols * cellSize + 50, svgHeight = marginY * 2 + rowsCount * (cellSize + rowGap);
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}"><rect width="100%" height="100%" fill="#ffffff"/>`;
+    svg += `<text x="${marginX}" y="35" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 列印藍圖 (${title} / 步數 N=${N})</text>`;
+    svg += `<text x="${marginX}" y="60" font-family="sans-serif" font-size="13" fill="#555">每行最高 15 格。行末附有梯形黏貼區供下一行黏貼銜接。（※ 摺線方向已自動補償紙張正反翻面）</text>`;
+
+    let currentGlobalIdx = 0;
+    for (let r = 0; r < rowsCount; r++) {
+        const y = marginY + r * (cellSize + rowGap);
+        let currentX = marginX;
+        let rowCellsCount = Math.min(maxCols, totalSquares - currentGlobalIdx);
+        for (let c = 0; c < rowCellsCount; c++) {
+            const logicalIdx = currentGlobalIdx + c;
+            svg += renderBlueprintCell(currentX, y, logicalIdx, pathTurns, cellSize);
+            if (c === rowCellsCount - 1) {
+                const tx = currentX + cellSize;
+                svg += `<polygon points="${tx},${y} ${tx+20},${y+8} ${tx+20},${y+cellSize-8} ${tx},${y+cellSize}" fill="#e9ecef" stroke="#222" stroke-width="1.5" stroke-dasharray="3,2"/>`;
+                svg += `<text x="${tx+2}" y="${y+cellSize/2+4}" font-family="sans-serif" font-size="10" fill="#555">${logicalIdx < totalSquares-1 ? '塗膠水' : '閉合'}</text>`;
+            }
+            currentX += cellSize;
+        }
+        currentGlobalIdx += rowCellsCount;
+    }
+    return svg + `</svg>`;
+}
+
+/* =========================================================================
+   3. Three.js 3D 摺紙模擬器 (引入 ResizeObserver 解決 0x0 破圖黑畫面)
+========================================================================= */
+let scene, camera, renderer, controls;
+let animHinges = [], isAnimPlaying = false, totalFolds = 0;
+let finalBoundingBox = new THREE.Box3(); 
+
+function init3DScene() {
+    const container = document.getElementById('modal-right');
+    
+    if (!renderer) {
+        // 初次建立 3D 場景
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        // 使用預設大小，後續由 ResizeObserver 修正
+        let w = container.clientWidth || 400;
+        let h = container.clientHeight || 400;
+
+        camera = new THREE.PerspectiveCamera(45, w / h, 1, 5000);
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(w, h);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        
+        // 將 canvas 插入到 controls 之前
+        container.insertBefore(renderer.domElement, container.firstChild);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.1;
+        
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(100, 200, 300);
+        scene.add(dirLight);
+
+        // 空間地板網格
+        const grid = new THREE.GridHelper(2000, 50, 0x555555, 0x333333);
+        grid.rotation.x = Math.PI / 2;
+        grid.position.z = -20;
+        scene.add(grid);
+
+        // 關鍵修復：使用 ResizeObserver 動態偵測容器大小變化，確保畫布撐滿
+        const resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const newW = entry.contentRect.width;
+                const newH = entry.contentRect.height;
+                if (newW > 0 && newH > 0) {
+                    camera.aspect = newW / newH;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(newW, newH);
+                }
+            }
+        });
+        resizeObserver.observe(container);
+
+        controls.addEventListener('start', () => { isAnimPlaying = false; syncPlayButtonUI(); });
+        requestAnimationFrame(render3DLoop);
+    }
+}
+
+function createPaperTexture(text, isTurn, isBackslash, colorStr) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    
+    // 背景色
+    ctx.fillStyle = isTurn ? (text === 'L' ? '#e7f1ff' : '#ffeef0') : '#f8f9fa';
+    ctx.fillRect(0, 0, 256, 256);
+    
+    // 黑框
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 6; 
+    ctx.strokeRect(0, 0, 256, 256);
+    
+    // 摺痕虛線
+    if (isTurn) {
+        ctx.strokeStyle = colorStr; ctx.lineWidth = 10; ctx.setLineDash([20, 15]);
+        ctx.beginPath();
+        if (isBackslash) { ctx.moveTo(0,0); ctx.lineTo(256,256); }
+        else { ctx.moveTo(0,256); ctx.lineTo(256,0); }
+        ctx.stroke();
+    }
+    
+    // 文字
+    ctx.fillStyle = colorStr || '#888'; ctx.font = 'bold 90px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, 128, 128);
+    
+    return new THREE.CanvasTexture(canvas);
+}
+
+function createDoubleSidedTriangle(p1, p2, p3, baseZOffset, frontTex) {
+    const group = new THREE.Group();
+    
+    // 正面
+    const fGeom = new THREE.BufferGeometry();
+    fGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p1, ...p2, ...p3]), 3));
+    const uvs = new Float32Array([ p1[0]/40, p1[1]/40+0.5, p2[0]/40, p2[1]/40+0.5, p3[0]/40, p3[1]/40+0.5 ]);
+    fGeom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    fGeom.computeVertexNormals();
+
+    // 背面
+    const bGeom = new THREE.BufferGeometry();
+    bGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...p1, ...p3, ...p2]), 3)); 
+    bGeom.computeVertexNormals();
+
+    // 材質與 Polygon Offset 防止 Z-fighting
+    const fMat = new THREE.MeshLambertMaterial({ map: frontTex, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: baseZOffset });
+    const bMat = new THREE.MeshLambertMaterial({ color: 0x90a4ae, side: THREE.FrontSide, polygonOffset: true, polygonOffsetFactor: baseZOffset + 0.1 });
+    
+    group.add(new THREE.Mesh(fGeom, fMat));
+    group.add(new THREE.Mesh(bGeom, bMat));
+
+    // 邊線
+    const edges = new THREE.EdgesGeometry(fGeom);
+    group.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 })));
+    
+    return group;
+}
+
+function build3DStrip(pathTurns) {
+    const oldStrip = scene.getObjectByName('stripRoot');
+    if (oldStrip) scene.remove(oldStrip);
+
+    const L = 40;
+    animHinges = [];
+    const stripRoot = new THREE.Group();
+    stripRoot.name = 'stripRoot';
+    scene.add(stripRoot);
+
+    let currentParent = stripRoot;
+
+    for (let i = 0; i < pathTurns.length * 2; i++) {
+        const zOffset = -i; 
+        
+        if (i % 2 === 0) {
+            // 緩衝格
+            const stepNum = Math.floor(i / 2) + 1;
+            const tex = createPaperTexture('#' + stepNum, false, false, '#888');
+            const cellGroup = new THREE.Group();
+            
+            const tri1 = createDoubleSidedTriangle([0, L/2, 0], [0, -L/2, 0], [L, L/2, 0], zOffset, tex);
+            const tri2 = createDoubleSidedTriangle([L, -L/2, 0], [L, L/2, 0], [0, -L/2, 0], zOffset, tex);
+            cellGroup.add(tri1, tri2);
+
+            const nextAnchor = new THREE.Group();
+            nextAnchor.position.set(L, 0, 0);
+            cellGroup.add(nextAnchor);
+
+            currentParent.add(cellGroup);
+            currentParent = nextAnchor;
+        } else {
+            // 轉向格
+            const turnIdx = Math.floor(i / 2);
+            const isLeft = (pathTurns[turnIdx] === 1);
+            const isEvenStep = (turnIdx % 2 === 0);
+            const isBackslash = (!isLeft && isEvenStep) || (isLeft && !isEvenStep);
+            const tex = createPaperTexture(isLeft ? 'L' : 'R', true, isBackslash, isLeft ? '#0066cc' : '#dc3545');
+
+            const turnGroup = new THREE.Group();
+            const hinge = new THREE.Group();
+            const nextAnchor = new THREE.Group();
+
+            if (isBackslash) {
+                const tri1 = createDoubleSidedTriangle([0, L/2, 0], [0, -L/2, 0], [L, -L/2, 0], zOffset, tex);
+                hinge.position.set(0, L/2, 0); 
+                hinge.userData = { axis: new THREE.Vector3(1, -1, 0).normalize() };
+                
+                const tri2 = createDoubleSidedTriangle([0, 0, 0], [L, -L, 0], [L, 0, 0], zOffset, tex);
+                hinge.add(tri2);
+                nextAnchor.position.set(L, -L/2, 0); 
+            } else {
+                const tri1 = createDoubleSidedTriangle([0, -L/2, 0], [L, L/2, 0], [0, L/2, 0], zOffset, tex);
+                hinge.position.set(0, -L/2, 0); 
+                hinge.userData = { axis: new THREE.Vector3(1, 1, 0).normalize() };
+                
+                const tri2 = createDoubleSidedTriangle([0, 0, 0], [L, 0, 0], [L, L, 0], zOffset, tex);
+                hinge.add(tri2);
+                nextAnchor.position.set(L, L/2, 0); 
+            }
+
+            turnGroup.add(tri1);
+            turnGroup.add(hinge);
+            hinge.add(nextAnchor);
+
+            animHinges.push(hinge);
+            currentParent.add(turnGroup);
+            currentParent = nextAnchor;
+        }
+    }
+    return stripRoot;
+}
+
+function applyFolds(progress) {
+    for (let i = 0; i < totalFolds; i++) {
+        let foldAmount = Math.max(0, Math.min(1, progress - i));
+        // Easing 緩動效果
+        foldAmount = foldAmount < 0.5 ? 2 * foldAmount * foldAmount : -1 + (4 - 2 * foldAmount) * foldAmount;
+        // 精準 180 度翻摺
+        const angle = foldAmount * Math.PI; 
+        animHinges[i].setRotationFromAxisAngle(animHinges[i].userData.axis, angle);
+    }
+}
+
+function render3DLoop() {
+    const slider = document.getElementById('anim-slider');
+    
+    if (isAnimPlaying) {
+        slider.value = Number(slider.value) + 0.03; 
+        
+        if (slider.value >= totalFolds) {
+            slider.value = totalFolds;
+            isAnimPlaying = false;
+            syncPlayButtonUI();
+            
+            // 動畫結束，拉遠攝影機展示全局
+            if (finalBoundingBox && !finalBoundingBox.isEmpty()) {
+                const center = new THREE.Vector3();
+                finalBoundingBox.getCenter(center);
+                const size = new THREE.Vector3();
+                finalBoundingBox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                
+                camera.position.lerp(new THREE.Vector3(center.x, center.y, maxDim * 1.5 + 50), 0.05);
+                controls.target.lerp(center, 0.05);
+            }
+        } else {
+            // 動畫播放中，焦點跟隨目前摺疊處
+            const activeIdx = Math.floor(slider.value);
+            if (animHinges[activeIdx]) {
+                const targetPos = new THREE.Vector3();
+                animHinges[activeIdx].getWorldPosition(targetPos);
+                controls.target.lerp(targetPos, 0.1);
+            }
+        }
+    }
+    
+    if (slider) {
+        applyFolds(Number(slider.value));
+        // 更新進度條文字
+        document.getElementById('anim-step-text').innerText = `${Math.floor(slider.value)} / ${totalFolds}`;
+    }
+    
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(render3DLoop);
+}
+
+function syncPlayButtonUI() { 
+    document.getElementById('btn-play').innerHTML = isAnimPlaying ? "⏸" : "▶"; 
+}
+
+/* =========================================================================
+   4. UI 事件與主邏輯
+========================================================================= */
+let cellStates = {}, debounceTimer, activeWorker = null, queryCache = new Map();
+
+function toggleNode(x, y, el) {
+    if (x === 0 && y === 0) return;
+    const key = `${x},${y}`;
+    let st = cellStates[key] || 0;
+    st = (st + 1) % 3;
+    if (st === 0) delete cellStates[key]; else cellStates[key] = st;
+    
+    el.className = 'node valid-parity'; 
+    el.innerHTML = '';
+    
+    if (st === 1) { el.classList.add('target'); el.innerHTML = '⭐'; }
+    if (st === 2) { el.classList.add('obstacle'); el.innerHTML = '❌'; }
+    
+    autoRun();
+}
+
+function initGrid(forceClear = false) {
+    if (forceClear) cellStates = {};
+    const steps = parseInt(document.getElementById('stepsInput').value, 10);
+    const R = Math.floor(steps / 2);
+    const board = document.getElementById('board');
+    const axisX = document.getElementById('axis-x-inner'), axisY = document.getElementById('axis-y-inner');
+    const svgOverlay = document.getElementById('svg-overlay');
+
+    const boardSize = 2 * R + 1;
+    board.style.width = `calc(${boardSize} * var(--cell))`; 
+    board.style.height = `calc(${boardSize} * var(--cell))`;
+    svgOverlay.setAttribute('viewBox', `-${R + 0.5} -${R + 0.5} ${boardSize} ${boardSize}`);
+    
+    document.getElementById('svg-path').setAttribute('d', '');
+    document.getElementById('results-container').innerHTML = '';
+    document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
+
+    Array.from(board.children).forEach(c => { if (c.id !== 'svg-overlay') board.removeChild(c); });
+    axisX.innerHTML = ''; axisY.innerHTML = '';
+
+    for (let x = -R; x <= R; x++) { 
+        const lx = document.createElement('div'); lx.className = 'axis-label-x'; 
+        lx.style.left = `calc(${x + R + 0.5} * var(--cell) + 15px)`; lx.innerText = x; axisX.appendChild(lx); 
+    }
+    for (let y = R; y >= -R; y--) { 
+        const ly = document.createElement('div'); ly.className = 'axis-label-y'; 
+        ly.style.top = `calc(${R - y + 0.5} * var(--cell) + 15px)`; ly.innerText = y; axisY.appendChild(ly); 
+    }
+
+    for (let y = R; y >= -R; y--) {
+        for (let x = -R; x <= R; x++) {
+            const node = document.createElement('div');
+            node.className = 'node'; 
+            node.dataset.coord = `${x},${y}`;
+            node.style.left = `calc(${x + R + 0.5} * var(--cell))`; 
+            node.style.top = `calc(${R - y + 0.5} * var(--cell))`;
+            
+            if ((Math.abs(x) + Math.abs(y)) % 2 !== 0) {
+                node.classList.add('invalid-parity');
+            } else {
+                node.classList.add('valid-parity');
+                if (x === 0 && y === 0) { 
+                    node.classList.add('center'); node.innerHTML = '🏠'; 
+                } else {
+                    if (cellStates[`${x},${y}`] === 1) { node.classList.add('target'); node.innerHTML = '⭐'; }
+                    if (cellStates[`${x},${y}`] === 2) { node.classList.add('obstacle'); node.innerHTML = '❌'; }
+                    node.onclick = () => toggleNode(x, y, node);
+                }
+            }
+            board.appendChild(node);
+        }
+    }
+}
+
+function handleWorkerResult(result, limit, targets, obstacles) {
+    const statusText = document.getElementById('statusText');
+    if (result.status === 'success') {
+        const chosenPaths = result.data.slice(0, limit);
+        statusText.innerHTML = `✅ 成功找到 ${chosenPaths.length} 組路線 <span style="color:#888; font-size:11px;">(${result.elapsed_ms.toFixed(1)}ms)</span>`;
+        statusText.style.color = "#28a745";
+        
+        // 確保主網格上的藍色線條畫出來
+        document.getElementById('svg-path').setAttribute('d', generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]));
+
+        const resDiv = document.getElementById('results-container');
+        resDiv.innerHTML = '';
+        
+        const featsHtml = renderSvgFeatures(targets, obstacles);
+        const tStr = targets.length > 0 ? targets.map(t => `<span class="coord-tag">(${t[0]}, ${t[1]})</span>`).join('') : `<span style="color:#aaa">無</span>`;
+        const oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : `<span style="color:#aaa">無</span>`;
+
+        chosenPaths.forEach((pathObj, idx) => {
+            const pathTurns = pathObj[1];
+            const svg_d = generateSvgPath(pathObj[0], pathTurns);
+            const bounds = getBounds(pathObj[0], pathTurns, targets, obstacles);
+            const P = 1.0;
+            const viewBox = `${bounds.minX - P} ${bounds.minY - P} ${bounds.maxX - bounds.minX + 2 * P} ${bounds.maxY - bounds.minY + 2 * P}`;
+            const gridHtml = renderSvgGrid(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, P);
+
+            const card = document.createElement('div'); card.className = 'thumb-card';
+            
+            // 點擊卡片開啟詳細視窗
+            card.onclick = () => openModal(
+                svg_d, 
+                `Result ${idx + 1}`, 
+                `<div><strong>⭐ 目標點：</strong>${tStr}</div><div><strong>❌ 障礙區：</strong>${oStr}</div>`, 
+                viewBox, 
+                gridHtml, 
+                featsHtml, 
+                pathTurns
+            );
+            
+            card.innerHTML = `<svg class="thumb-svg" viewBox="${viewBox}">${gridHtml}<path d="${svg_d}" fill="none" stroke="#007bff" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>${featsHtml}</svg><div class="thumb-title">Result ${idx + 1}</div>`;
+            resDiv.appendChild(card);
+        });
+    } else {
+        statusText.innerHTML = `⚠️ ${result.msg} <span style="color:#888; font-size:11px;">(${result.elapsed_ms.toFixed(1)}ms)</span>`;
+        statusText.style.color = "#dc3545";
+        if (result.nodes) {
+            result.nodes.forEach(coordStr => { 
+                const errNode = document.querySelector(`[data-coord="${coordStr}"]`); 
+                if (errNode) errNode.classList.add('error-pulse'); 
+            });
+        }
+    }
+}
+
+function autoRun() {
+    clearTimeout(debounceTimer);
+    if (activeWorker) { activeWorker.terminate(); activeWorker = null; }
+    
+    document.getElementById('statusText').innerHTML = "<span class='loader'></span> 深度搜尋中，請稍候...";
+    document.getElementById('statusText').style.color = "#007bff";
+    document.getElementById('svg-path').setAttribute('d', '');
+    document.getElementById('results-container').innerHTML = '';
+    document.querySelectorAll('.error-pulse').forEach(el => el.classList.remove('error-pulse'));
+
+    debounceTimer = setTimeout(() => {
+        const steps = parseInt(document.getElementById('stepsInput').value, 10);
+        const limit = parseInt(document.getElementById('limitInput').value, 10);
+        
+        const targets = [], obstacles = [];
+        for (const k in cellStates) {
+            const p = k.split(',');
+            if (cellStates[k] === 1) targets.push([parseInt(p[0], 10), parseInt(p[1], 10)]);
+            if (cellStates[k] === 2) obstacles.push([parseInt(p[0], 10), parseInt(p[1], 10)]);
+        }
+        
+        const cacheKey = `${steps}_${limit}_${JSON.stringify(targets)}_${JSON.stringify(obstacles)}`;
+        
+        if (queryCache.has(cacheKey)) {
+            handleWorkerResult(queryCache.get(cacheKey), limit, targets, obstacles);
+        } else {
+            activeWorker = new Worker(workerUrl);
+            activeWorker.onmessage = function(e) {
+                if (e.data.status === 'success') { 
+                    if (queryCache.size > 20) queryCache.delete(queryCache.keys().next().value); 
+                    queryCache.set(cacheKey, e.data); 
+                }
+                handleWorkerResult(e.data, limit, targets, obstacles);
+                activeWorker = null;
+            };
+            activeWorker.postMessage({ steps, targets, obstacles, limit });
+        }
+    }, 50);
+}
+
+// 開啟檢視視窗
+window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml, pathTurns) {
+    document.getElementById('modal-title').innerText = title;
+    
+    // 將座標資訊安全地放回顯眼的位置
+    document.getElementById('modal-info').innerHTML = infoHtml;
+    
+    // 渲染左側 2D SVG
+    document.querySelector('.modal-svg').setAttribute('viewBox', viewBox);
+    document.getElementById('modal-svg-content').innerHTML = `${gridHtml}<path d="${svgPathD}" fill="none" stroke="#007bff" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.4));"/>${featsHtml}`;
+    
+    // 渲染下方紙帶藍圖
+    document.getElementById('strip-preview-container').innerHTML = generatePreviewStripSvg(pathTurns);
+    
+    // 列印按鈕事件綁定
+    document.getElementById('btn-print-blueprint').onclick = function() {
+        if (typeof gtag === 'function') gtag('event', 'export_blueprint', { 'steps': pathTurns.length });
+        document.getElementById('print-area').innerHTML = generatePrintStripSvg(pathTurns, title);
+        window.print();
+    };
+
+    // 顯示視窗，讓 ResizeObserver 可以正確抓到寬高
+    document.getElementById('modal-overlay').style.display = 'flex';
+    
+    // 初始化並啟動 3D
+    init3DScene();
+    currentPathTurns = pathTurns;
+    totalFolds = pathTurns.length;
+    
+    const stripRoot = build3DStrip(pathTurns);
+    
+    // 預先計算完成圖的大小
+    applyFolds(totalFolds);
+    stripRoot.updateMatrixWorld(true);
+    finalBoundingBox.setFromObject(stripRoot);
+    
+    // 歸零並重置狀態
+    applyFolds(0);
+    const slider = document.getElementById('anim-slider');
+    slider.max = totalFolds;
+    slider.value = 0;
+    
+    camera.position.set(-100, -100, 300);
+    controls.target.set(0, 0, 0);
+    
+    isAnimPlaying = true;
+    syncPlayButtonUI();
+};
+
+window.closeModal = function() {
+    document.getElementById('modal-overlay').style.display = 'none';
+    isAnimPlaying = false;
+};
+
+// 播放/暫停按鈕
+document.getElementById('btn-play').onclick = function() {
+    if (document.getElementById('anim-slider').value >= totalFolds) {
+        document.getElementById('anim-slider').value = 0;
+    }
+    isAnimPlaying = !isAnimPlaying;
+    syncPlayButtonUI();
+};
+
+// 網頁載入時啟動
+initGrid(false); 
+autoRun();
 </script>
 </body>
 </html>
