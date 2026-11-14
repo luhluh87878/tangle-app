@@ -165,7 +165,7 @@
 
   #print-area { display: none; }
 
-  /* ================== 列印專用 CSS (保證徹底消除空白頁) ================== */
+  /* ================== 列印專用 CSS (徹底消除空白頁) ================== */
   @media print {
       body * { visibility: hidden; }
       #print-area, #print-area * { visibility: visible; }
@@ -178,18 +178,22 @@
       }
       
       #print-area { 
-          display: block; 
+          display: block !important; 
           position: absolute; 
           left: 0; top: 0; 
           width: 100%; 
           height: auto !important;
           margin: 0; padding: 0; 
-          page-break-inside: avoid;
+          page-break-after: auto;
       }
-      /* 禁止在 SVG 內部斷頁，並隱藏超出的部分 */
-      svg {
+      
+      /* 強制印完即止，不產生新頁面 */
+      #print-area svg {
           page-break-inside: avoid;
+          page-break-after: avoid;
+          margin-bottom: 0 !important;
       }
+      
       @page { size: portrait; margin: 10mm; }
   }
 </style>
@@ -232,6 +236,7 @@
     <div id="axis-x"><div class="axis-inner" id="axis-x-inner"></div></div>
     <div id="axis-y"><div class="axis-inner" id="axis-y-inner"></div></div>
     <div id="board-container"><div id="board">
+        <!-- 主畫面的扭扭樂圓滑藍線維持原樣 -->
         <svg id="svg-overlay"><path id="svg-path" d="" fill="none" stroke="#007bff" stroke-width="0.35" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 0px 2px rgba(0,123,255,0.6));"/></svg>
     </div></div>
   </div>
@@ -248,7 +253,7 @@
         <!-- 頂端資訊與獨立縮圖區塊 -->
         <div id="modal-top-section">
             <div id="modal-info"></div>
-            <!-- 獨立的實體摺紙平面圖框 (黑白幾何塊拼接) -->
+            <!-- 獨立的實體摺紙平面圖框 (黑白等腰直角三角形與 1x1.5 白色矩形完美拼接) -->
             <div id="modal-thumb-box">
                 <div class="badge-label">實體模型</div>
                 <svg class="modal-thumb-svg" preserveAspectRatio="xMidYMid meet">
@@ -579,7 +584,7 @@
   const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
   const MAIN_TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
 
-  // 產生藍色扭扭樂圓弧 (主畫面與縮圖列表)
+  // 產生藍色扭扭樂圓弧 (保留用於主畫面與縮圖列表)
   function generateArcSvgPath(currDirStart, pathTurns) {
       let svgD = "M 0 0";
       let cx = 0, cy = 0, cdir = currDirStart;
@@ -598,18 +603,20 @@
   }
   
   // =========================================================================
-  // 核心修復：精確拼接 1.5 白色矩形 與 黑色直角等腰三角形
+  // 核心修復：根據手繪草圖，精確拼接 1.5 白色矩形 與 黑色直角等腰三角形
   // =========================================================================
   function generateOrigamiPolygons(startDir, pathTurns) {
-      // 0:Up(-Y), 1:Right(+X), 2:Down(+Y), 3:Left(-X) 
+      // SVG 座標系：0:Up(-Y), 1:Right(+X), 2:Down(+Y), 3:Left(-X)
       const dx = [0, 1, 0, -1];
       const dy = [-1, 0, 1, 0];
       
       let svgElements = '';
+      
+      const W = 1.0;  // 寬度
+      const L = 1.5;  // 直段長度
+      
       let cx = 0.0, cy = 0.0;
       let cdir = startDir;
-      const W = 1.0;  // 寬度
-      const L = 1.5;  // 加長直段
       
       let minX = 0, maxX = 0, minY = 0, maxY = 0;
       function updateBounds(x, y) {
@@ -620,13 +627,15 @@
       for (let i = 0; i < pathTurns.length; i++) {
           const turn = pathTurns[i];
           
-          // 1. 白色 1.5x1 矩形
+          // 1. 鋪設白色長方形 (長度 1.5, 寬度 1)
           const nx = cx + dx[cdir] * L;
           const ny = cy + dy[cdir] * L;
           
+          // 垂直於前進方向的法向量
           const nx_norm = dy[cdir];
           const ny_norm = -dx[cdir];
           
+          // 矩形的四個角落
           const w_c1x = cx + nx_norm * (W/2), w_c1y = cy + ny_norm * (W/2);
           const w_c2x = cx - nx_norm * (W/2), w_c2y = cy - ny_norm * (W/2);
           const w_c3x = nx - nx_norm * (W/2), w_c3y = ny - ny_norm * (W/2);
@@ -635,22 +644,24 @@
           updateBounds(w_c1x, w_c1y); updateBounds(w_c2x, w_c2y);
           updateBounds(w_c3x, w_c3y); updateBounds(w_c4x, w_c4y);
           
-          svgElements += `<polygon points="${w_c1x},${w_c1y} ${w_c2x},${w_c2y} ${w_c3x},${w_c3y} ${w_c4x},${w_c4y}" fill="#ffffff" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
+          svgElements += `<polygon points="${w_c1x},${w_c1y} ${w_c2x},${w_c2y} ${w_c3x},${w_c3y} ${w_c4x},${w_c4y}" fill="#ffffff" stroke="#111111" stroke-width="0.08" stroke-linejoin="miter"/>`;
           
-          // 2. 黑色直角等腰三角形
+          // 2. 鋪設黑色直角等腰三角形
           let corner_x, corner_y;
           if (turn === 1) { // 左轉
+              // 直角在外側轉角處
               corner_x = nx - nx_norm * (W/2) + dx[cdir] * W;
               corner_y = ny - ny_norm * (W/2) + dy[cdir] * W;
-              svgElements += `<polygon points="${w_c3x},${w_c3y} ${w_c4x},${w_c4y} ${corner_x},${corner_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
+              svgElements += `<polygon points="${w_c3x},${w_c3y} ${w_c4x},${w_c4y} ${corner_x},${corner_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="miter"/>`;
               
+              // 更新下一段白色矩形的起點與方向
               cx = (w_c4x + corner_x) / 2;
               cy = (w_c4y + corner_y) / 2;
               cdir = (cdir - 1 + 4) % 4;
           } else { // 右轉
               corner_x = nx + nx_norm * (W/2) + dx[cdir] * W;
               corner_y = ny + ny_norm * (W/2) + dy[cdir] * W;
-              svgElements += `<polygon points="${w_c3x},${w_c3y} ${w_c4x},${w_c4y} ${corner_x},${corner_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="round"/>`;
+              svgElements += `<polygon points="${w_c3x},${w_c3y} ${w_c4x},${w_c4y} ${corner_x},${corner_y}" fill="#111111" stroke="#111111" stroke-width="0.08" stroke-linejoin="miter"/>`;
               
               cx = (w_c3x + corner_x) / 2;
               cy = (w_c3y + corner_y) / 2;
@@ -714,7 +725,7 @@
       return feats;
   }
   
-  // 生成實體黑白積木拼接圖的 SVG 群組 (列印版右上角)
+  // 生成實體黑白積木拼接圖的 SVG 群組 (供 Modal 與列印版使用)
   function getOrigamiThumbnailSvgGroup(origamiPolygons, viewBox, offsetX, offsetY, scale) {
       return `
       <g transform="translate(${offsetX}, ${offsetY}) scale(${scale})">
@@ -1003,7 +1014,7 @@
                   openModal(arc_d, origamiObj.svgElements, `Result ${idx + 1}`, infoHtml, arcViewBox, origamiViewBox, gridHtml, featsHtml, pathTurns);
               };
               
-              // 徹底保證：首頁下方的縮圖為「藍色的扭扭樂圓弧圖案」
+              // 首頁下方縮圖，確保為「藍色的扭扭樂圓弧圖案」
               card.innerHTML = `
                   <svg class="thumb-svg" viewBox="${arcViewBox}">
                       ${gridHtml}
