@@ -541,6 +541,49 @@
   const DIR_VEC_X = new Int8Array([0, 1, 0, -1]);
   const DIR_VEC_Y = new Int8Array([1, 0, -1, 0]);
 
+  // 紙帶圓弧邊界交點比例常數 (sqrt(3)/2 - 0.5 與 1.5 - sqrt(3)/2)
+  const ARC_ALPHA = Math.sqrt(3) / 2 - 0.5;
+  const ARC_BETA = 1 - ARC_ALPHA;
+
+  function isTurnSlashCrease(pathTurns, turnIdx) {
+      const isLeft = (pathTurns[turnIdx] === 1);
+      const isEvenStep = (turnIdx % 2 === 0);
+      const isBackslash = (isLeft && isEvenStep) || (!isLeft && !isEvenStep);
+      return !isBackslash;
+  }
+
+  // 生成單一紙帶格子的淡色圓弧 SVG 片段
+  function renderCellFaintCurve(pathTurns, logicalIdx, cellX, cellY, cellSize, strokeWidth) {
+      const N = pathTurns.length;
+      const turnIdx = Math.floor(logicalIdx / 2);
+      const currSlash = isTurnSlashCrease(pathTurns, turnIdx);
+      const a = ARC_ALPHA * cellSize;
+      const b = ARC_BETA * cellSize;
+      const half = 0.5 * cellSize;
+
+      let d = '';
+      if (logicalIdx % 2 === 0) {
+          // 連接格 (#1 ~ #N)：由前一步摺痕決定前半段，由當前步摺痕決定後半段
+          const prevIdx = (turnIdx - 1 + N) % N;
+          const prevSlash = isTurnSlashCrease(pathTurns, prevIdx);
+          const yIn = prevSlash ? (cellY + b) : (cellY + a);
+          const sweepIn = prevSlash ? 1 : 0;
+          const yOut = currSlash ? (cellY + a) : (cellY + b);
+          const sweepOut = currSlash ? 0 : 1;
+
+          d = `M ${cellX} ${yIn} A ${cellSize} ${cellSize} 0 0 ${sweepIn} ${cellX + half} ${cellY + half} ` +
+              `A ${cellSize} ${cellSize} 0 0 ${sweepOut} ${cellX + cellSize} ${yOut}`;
+      } else {
+          // 轉彎格 (L / R)：依據 '/' 或 '\' 摺痕留在對應正面三角形內
+          if (currSlash) {
+              d = `M ${cellX} ${cellY + a} A ${cellSize} ${cellSize} 0 0 0 ${cellX + a} ${cellY}`;
+          } else {
+              d = `M ${cellX} ${cellY + b} A ${cellSize} ${cellSize} 0 0 1 ${cellX + a} ${cellY + cellSize}`;
+          }
+      }
+      return `<path d="${d}" fill="none" stroke="#0066cc" stroke-width="${strokeWidth}" stroke-opacity="0.30" stroke-linecap="round"/>`;
+  }
+
   function generateSvgPath(currDirStart, pathTurns) {
       let svgD = "M 0 0";
       let cx = 0, cy = 0, cdir = currDirStart;
@@ -697,7 +740,7 @@
       return feats;
   }
 
-  // A. 螢幕預覽用：一線到底無縫連續 SVG (引入奇偶翻面法則)
+  // A. 螢幕預覽用：一線到底無縫連續 SVG (引入奇偶翻面法則 + 淡色圓弧導引)
   function generatePreviewStripSvg(pathTurns) {
       const N = pathTurns.length;
       const totalSquares = 2 * N;
@@ -716,6 +759,7 @@
           if (i % 2 === 0) { // 奇數格: 緩衝連接格
               const stepNum = Math.floor(i / 2) + 1;
               svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="#f8f9fa" stroke="#222" stroke-width="1.5"/>`;
+              svg += renderCellFaintCurve(pathTurns, i, x, y, cellSize, 3.2);
               svg += `<text x="${x + 4}" y="${y + 16}" font-family="monospace" font-size="12" fill="#888">#${stepNum}</text>`;
               svg += `<circle cx="${x + cellSize/2}" cy="${y + cellSize/2}" r="2" fill="#aaa"/>`;
           } else { // 偶數格: 轉向格
@@ -728,6 +772,7 @@
               const labelText = isLeft ? "L" : "R";
               
               svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
+              svg += renderCellFaintCurve(pathTurns, i, x, y, cellSize, 3.2);
               
               if ((isLeft && isEvenStep) || (!isLeft && !isEvenStep)) {
                   svg += `<line x1="${x}" y1="${y}" x2="${x + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
@@ -747,7 +792,7 @@
       return svg;
   }
 
-  // B. 列印用：分段換行 SVG (含右側獨立隔離之「真實摺疊紙帶 + 半透明圓弧導引線」對照框)
+  // B. 列印用：分段換行 SVG (含右側獨立隔離之「真實摺疊紙帶 + 半透明圓弧導引線」對照框 + 紙帶淡色曲線)
   function generatePrintStripSvg(startDir, pathTurns, targets, obstacles, title) {
       const N = pathTurns.length;
       const totalSquares = 2 * N;
@@ -847,6 +892,7 @@
               }
 
               svg += `<rect x="${currentX}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
+              svg += renderCellFaintCurve(pathTurns, logicalIdx, currentX, y, cellSize, 2.8);
               
               if (!isTurnCell) {
                   const stepNum = Math.floor(logicalIdx / 2) + 1;
