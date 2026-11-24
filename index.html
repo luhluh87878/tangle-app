@@ -10,11 +10,10 @@
   gtag('config', 'G-2SC9G5G9H5');
 </script>
 
-
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="google" content="notranslate">
-<title>Twisty Turny 尋路引擎 (Web Worker + 列印藍圖版)</title>
+<title>Twisty Turny 極速尋路引擎 (Web Worker + 完美列印藍圖版)</title>
 <style>
   :root { --cell: 40px; }
   body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f8f9fa; touch-action: manipulation; }
@@ -185,7 +184,7 @@
         👉 點 3 下：恢復空白<br>
     </div>
     <div style="color:#888; font-size: 11.5px; margin-bottom: 8px;">（註：灰色小叉叉 ✖ 代表幾何上永遠無法抵達的死區）</div>
-    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽方格紙帶展開圖</b>，一鍵列印或存成 PDF！</span></p>
+    <p>出圖與摺紙藍圖：<span style="font-weight: normal;">點開圖案即可預覽一線到底的 <b>2N 方格紙帶展開圖</b>，一鍵列印或存成 PDF！</span></p>
   </div>
 
   <div class="slider-group">
@@ -226,10 +225,10 @@
         </div>
         <div id="modal-info"></div>
         
-        <div style="width: 100%; text-align: left; font-size: 13px; font-weight: bold; color: #444; margin-bottom: 5px;">📜 方格紙帶預覽：</div>
+        <div style="width: 100%; text-align: left; font-size: 13px; font-weight: bold; color: #444; margin-bottom: 5px;">📜 連續 2N 方格紙帶預覽 (可左右滑動)：</div>
         <div id="strip-preview-container"></div>
         
-        <button id="btn-print-blueprint" class="btn-export">🖨️ 進入列印 / 另存 PDF</button>
+        <button id="btn-print-blueprint" class="btn-export">🖨️ 進入列印 / 另存 PDF (自動分段)</button>
     </div>
 </div>
 
@@ -538,6 +537,9 @@
   const MAIN_TRANS_DX = new Int8Array([-1, 1, 1, 1, 1, -1, -1, -1]);
   const MAIN_TRANS_DY = new Int8Array([1, 1, 1, -1, -1, -1, -1, 1]);
   const MAIN_TRANS_NDIR = new Uint8Array([3, 1, 0, 2, 1, 3, 2, 0]);
+  // 方向向量：0=北(0,1), 1=東(1,0), 2=南(0,-1), 3=西(-1,0)
+  const DIR_VEC_X = new Int8Array([0, 1, 0, -1]);
+  const DIR_VEC_Y = new Int8Array([1, 0, -1, 0]);
 
   function generateSvgPath(currDirStart, pathTurns) {
       let svgD = "M 0 0";
@@ -554,6 +556,94 @@
           cx = nx; cy = ny;
       }
       return svgD;
+  }
+
+  // 生成「實體紙帶摺疊後的真實幾何」（1x1 正方形 + 45° 等腰直角三角形）
+  function generateFoldedPaperGeometry(startDir, pathTurns, targets, obstacles) {
+      let minX = -0.5, maxX = 0.5, minY = -0.5, maxY = 0.5;
+      let cx = 0, cy = 0, cdir = startDir;
+      let squaresHtml = '';
+      let trianglesHtml = '';
+      let creasesHtml = '';
+
+      const firstDirX = DIR_VEC_X[startDir];
+      const firstDirY = DIR_VEC_Y[startDir];
+
+      for (let i = 0; i < pathTurns.length; i++) {
+          const turn = pathTurns[i];
+          const isLeft = (turn === 1);
+          const turnIdx = isLeft ? 0 : 1;
+          const transOffset = (cdir << 1) | turnIdx;
+
+          // 1. 繪製當前步驟的 1x1 連接正方形 (中心在 cx, cy)
+          const sqFill = (i === 0) ? "#d1e7dd" : "#ffffff"; // 起點格 #1 標為淡綠色
+          squaresHtml += `<rect x="${cx - 0.5}" y="${cy - 0.5}" width="1" height="1" fill="${sqFill}" stroke="#222" stroke-width="0.06"/>`;
+
+          // 2. 計算摺疊後的 45° 等腰直角三角形三個頂點
+          const ux = DIR_VEC_X[cdir];
+          const uy = DIR_VEC_Y[cdir];
+          const ndir = MAIN_TRANS_NDIR[transOffset];
+          const vx = DIR_VEC_X[ndir];
+          const vy = DIR_VEC_Y[ndir];
+
+          // 未摺疊前轉彎格的中心
+          const tx = cx + ux;
+          const ty = cy + uy;
+
+          // 三角形三個頂點：V1(入口外側)、V2(內側90度轉軸)、V3(出口外側)
+          const v1x = tx - 0.5 * ux - 0.5 * vx;
+          const v1y = ty - 0.5 * uy - 0.5 * vy;
+          const v2x = tx - 0.5 * ux + 0.5 * vx;
+          const v2y = ty - 0.5 * uy + 0.5 * vy;
+          const v3x = tx + 0.5 * ux + 0.5 * vx;
+          const v3y = ty + 0.5 * uy + 0.5 * vy;
+
+          const triFill = isLeft ? "#e7f1ff" : "#ffeef0";
+          const creaseCol = isLeft ? "#0066cc" : "#dc3545";
+
+          trianglesHtml += `<polygon points="${v1x},${v1y} ${v2x},${v2y} ${v3x},${v3y}" fill="${triFill}" stroke="#222" stroke-width="0.06" stroke-linejoin="round"/>`;
+          // 45° 斜邊摺痕強調線
+          creasesHtml += `<line x1="${v1x}" y1="${v1y}" x2="${v3x}" y2="${v3y}" stroke="${creaseCol}" stroke-width="0.07" stroke-dasharray="0.14,0.08"/>`;
+
+          // 更新邊界範圍 (納入正方形 ±0.5 與三角形頂點)
+          const nx = cx + MAIN_TRANS_DX[transOffset];
+          const ny = cy + MAIN_TRANS_DY[transOffset];
+          if (nx - 0.5 < minX) minX = nx - 0.5;
+          if (nx + 0.5 > maxX) maxX = nx + 0.5;
+          if (ny - 0.5 < minY) minY = ny - 0.5;
+          if (ny + 0.5 > maxY) maxY = ny + 0.5;
+
+          const xs = [v1x, v2x, v3x];
+          const ys = [v1y, v2y, v3y];
+          for (let k = 0; k < 3; k++) {
+              if (xs[k] < minX) minX = xs[k];
+              if (xs[k] > maxX) maxX = xs[k];
+              if (ys[k] < minY) minY = ys[k];
+              if (ys[k] > maxY) maxY = ys[k];
+          }
+
+          cx = nx;
+          cy = ny;
+          cdir = ndir;
+      }
+
+      for (let i = 0; i < targets.length; i++) {
+          const t = targets[i];
+          if (t[0] - 0.5 < minX) minX = t[0] - 0.5;
+          if (t[0] + 0.5 > maxX) maxX = t[0] + 0.5;
+          if (t[1] - 0.5 < minY) minY = t[1] - 0.5;
+          if (t[1] + 0.5 > maxY) maxY = t[1] + 0.5;
+      }
+      for (let i = 0; i < obstacles.length; i++) {
+          const o = obstacles[i];
+          if (o[0] - 0.5 < minX) minX = o[0] - 0.5;
+          if (o[0] + 0.5 > maxX) maxX = o[0] + 0.5;
+          if (o[1] - 0.5 < minY) minY = o[1] - 0.5;
+          if (o[1] + 0.5 > maxY) maxY = o[1] + 0.5;
+      }
+
+      const paperHtml = squaresHtml + trianglesHtml + creasesHtml;
+      return { paperHtml, minX, maxX, minY, maxY, firstDirX, firstDirY };
   }
 
   function getBounds(startDir, pathTurns, targets, obstacles) {
@@ -594,15 +684,15 @@
   }
 
   function renderSvgFeatures(targets, obstacles) {
-      let feats = `<circle cx="0" cy="0" r="0.25" fill="#222"/>`;
+      let feats = `<circle cx="0" cy="0" r="0.22" fill="#198754"/>`;
       targets.forEach(t => {
           const cx = t[0], cy = t[1];
-          const starPoints = `${cx},${cy-0.45} ${cx+0.14},${cy-0.14} ${cx+0.48},${cy-0.14} ${cx+0.2},${cy+0.1} ${cx+0.3},${cy+0.42} ${cx},${cy+0.22} ${cx-0.3},${cy+0.42} ${cx-0.2},${cy+0.1} ${cx-0.48},${cy-0.14} ${cx-0.14},${cy-0.14}`;
+          const starPoints = `${cx},${cy-0.42} ${cx+0.13},${cy-0.13} ${cx+0.44},${cy-0.13} ${cx+0.18},${cy+0.09} ${cx+0.28},${cy+0.38} ${cx},${cy+0.2} ${cx-0.28},${cy+0.38} ${cx-0.18},${cy+0.09} ${cx-0.44},${cy-0.13} ${cx-0.13},${cy-0.13}`;
           feats += `<polygon points="${starPoints}" fill="gold" stroke="#c69500" stroke-width="0.05" stroke-linejoin="round"/>`;
       });
       obstacles.forEach(o => {
-          feats += `<line x1="${o[0]-0.3}" y1="${o[1]-0.3}" x2="${o[0]+0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
-          feats += `<line x1="${o[0]+0.3}" y1="${o[1]-0.3}" x2="${o[0]-0.3}" y2="${o[1]+0.3}" stroke="#dc3545" stroke-width="0.15" stroke-linecap="round"/>`;
+          feats += `<line x1="${o[0]-0.28}" y1="${o[1]-0.28}" x2="${o[0]+0.28}" y2="${o[1]+0.28}" stroke="#dc3545" stroke-width="0.14" stroke-linecap="round"/>`;
+          feats += `<line x1="${o[0]+0.28}" y1="${o[1]-0.28}" x2="${o[0]-0.28}" y2="${o[1]+0.28}" stroke="#dc3545" stroke-width="0.14" stroke-linecap="round"/>`;
       });
       return feats;
   }
@@ -631,7 +721,7 @@
           } else { // 偶數格: 轉向格
               const turnIdx = Math.floor(i / 2);
               const isLeft = (pathTurns[turnIdx] === 1);
-              const isEvenStep = (turnIdx % 2 === 0); // 判斷是否為偶數步 (紙張正面)
+              const isEvenStep = (turnIdx % 2 === 0);
               
               const bgFill = isLeft ? "#e7f1ff" : "#ffeef0";
               const strokeCol = isLeft ? "#0066cc" : "#dc3545";
@@ -639,13 +729,10 @@
               
               svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="${bgFill}" stroke="#222" stroke-width="1.5"/>`;
               
-              // 奇偶性翻面判定邏輯
               if ((isLeft && isEvenStep) || (!isLeft && !isEvenStep)) {
-                  // 畫 \ (左上至右下)
                   svg += `<line x1="${x}" y1="${y}" x2="${x + cellSize}" y2="${y + cellSize}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
                   svg += `<text x="${x + cellSize - 18}" y="${y + 18}" font-family="sans-serif" font-size="15" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
               } else {
-                  // 畫 / (左下至右上)
                   svg += `<line x1="${x}" y1="${y + cellSize}" x2="${x + cellSize}" y2="${y}" stroke="${strokeCol}" stroke-width="1.8" stroke-dasharray="4,3"/>`;
                   svg += `<text x="${x + 6}" y="${y + 18}" font-family="sans-serif" font-size="15" font-weight="bold" fill="${strokeCol}">${labelText}</text>`;
               }
@@ -660,30 +747,88 @@
       return svg;
   }
 
-  // B. 列印用：分段換行 SVG (每行 15 格實體格，無行首對齊格，引入奇偶翻面法則)
-  function generatePrintStripSvg(pathTurns, title) {
+  // B. 列印用：分段換行 SVG (含右側獨立隔離之「真實摺疊紙帶完成圖」對照框)
+  function generatePrintStripSvg(startDir, pathTurns, targets, obstacles, title) {
       const N = pathTurns.length;
       const totalSquares = 2 * N;
       const cellSize = 45;
-      const maxCols = 15; // 規定每行印 15 個有效格
+      const maxCols = 15; // 每行最多 15 格
       
-      const marginX = 40, marginY = 80, rowGap = 35;
+      // 頁首區與紙帶區嚴格隔離的座標設定，確保零重疊
+      const marginX = 40;
+      const headerTop = 18;
+      const headerHeight = 162; // 頁首佔 y = 18 ~ 180
+      const dividerY = headerTop + headerHeight + 8; // 分隔線 y = 188
+      const marginY = dividerY + 26; // 第一行紙帶固定從 y = 214 開始，絕不重疊
+      const rowGap = 38;
       
       const rowsCount = Math.ceil(totalSquares / maxCols);
-      const svgWidth = marginX * 2 + maxCols * cellSize + 50; 
-      const svgHeight = marginY * 2 + rowsCount * (cellSize + rowGap);
+      const svgWidth = marginX * 2 + maxCols * cellSize + 50; // 805px
+      const svgHeight = marginY + rowsCount * (cellSize + rowGap) + 20;
+
+      // 計算右側「真實摺疊紙帶（1x1正方形 + 45°三角形）」幾何
+      const folded = generateFoldedPaperGeometry(startDir, pathTurns, targets, obstacles);
+      const pad = 0.6;
+      const fMinX = folded.minX - pad;
+      const fMaxX = folded.maxX + pad;
+      const fMinY = folded.minY - pad;
+      const fMaxY = folded.maxY + pad;
+      const fW = fMaxX - fMinX;
+      const fH = fMaxY - fMinY;
+      // 翻轉 Y 軸的 viewBox，使數學座標 (+y 朝上) 正確顯示
+      const foldedViewBox = `${fMinX} ${-fMaxY} ${fW} ${fH}`;
+      const foldedGridHtml = renderSvgGrid(folded.minX, folded.maxX, folded.minY, folded.maxY, pad);
+      const foldedFeatsHtml = renderSvgFeatures(targets, obstacles);
+
+      const tSummary = targets.length > 0 ? targets.map(t => `(${t[0]},${t[1]})`).join(' ') : "無";
+      const oSummary = obstacles.length > 0 ? obstacles.map(o => `(${o[0]},${o[1]})`).join(' ') : "無";
+
+      // 右側對照框座標 (x = 585 ~ 765, y = 18 ~ 180)
+      const boxX = svgWidth - marginX - 180;
+      const boxY = headerTop;
+      const boxW = 180;
+      const boxH = headerHeight;
 
       let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">`;
       svg += `<rect width="100%" height="100%" fill="#ffffff"/>`;
       
-      svg += `<text x="${marginX}" y="35" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 分段列印紙帶藍圖 (${title} / 步數 N=${N})</text>`;
-      svg += `<text x="${marginX}" y="60" font-family="sans-serif" font-size="13" fill="#555">每行最高 15 格。每行末端附有梯形黏貼區，請直接將下一行的第 1 格黏貼於其上銜接。</text>`;
+      // --- 頁首左側：標題與規則說明 (限制在 x = 40 ~ 570 內，不侵入右側圖框) ---
+      svg += `<text x="${marginX}" y="42" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Twisty Turny 分段列印紙帶藍圖 (${title})</text>`;
+      svg += `<text x="${marginX}" y="66" font-family="sans-serif" font-size="13" font-weight="bold" fill="#0056b3">總步數 N = ${N}（共 ${totalSquares} 格，分 ${rowsCount} 段列印）</text>`;
+      svg += `<text x="${marginX}" y="90" font-family="sans-serif" font-size="12" fill="#444">⭐ 目標：${tSummary.length > 38 ? tSummary.slice(0, 38) + '...' : tSummary}</text>`;
+      svg += `<text x="${marginX}" y="110" font-family="sans-serif" font-size="12" fill="#444">❌ 障礙：${oSummary.length > 38 ? oSummary.slice(0, 38) + '...' : oSummary}</text>`;
+      svg += `<text x="${marginX}" y="136" font-family="sans-serif" font-size="12" fill="#555">1. 沿外框剪下各段，行末梯形塗膠黏接下一行第 1 格。</text>`;
+      svg += `<text x="${marginX}" y="155" font-family="sans-serif" font-size="12" fill="#555">2. 偶數格依 45° 虛線翻折（已補償正反翻面奇偶性）。</text>`;
+      svg += `<text x="${marginX}" y="174" font-family="sans-serif" font-size="12" fill="#555">3. 綠格為 #1 起點，頭尾閉合後形狀與右側完成圖一致。</text>`;
 
+      // --- 頁首右側：獨立隔離的「真實摺疊紙帶完成圖」對照框 ---
+      svg += `<rect x="${boxX}" y="${boxY}" width="${boxW}" height="${boxH}" rx="8" fill="#fcfcfc" stroke="#999" stroke-width="1.5"/>`;
+      svg += `<text x="${boxX + boxW / 2}" y="${boxY + 17}" text-anchor="middle" font-family="sans-serif" font-size="11.5" font-weight="bold" fill="#333">實體摺疊紙帶完成圖</text>`;
+      svg += `<line x1="${boxX}" y1="${boxY + 23}" x2="${boxX + boxW}" y2="${boxY + 23}" stroke="#ddd" stroke-width="1"/>`;
+      
+      // 巢狀 SVG：保證內部圖形無論比例如何，絕對不會超出對照框邊界
+      svg += `<svg x="${boxX + 6}" y="${boxY + 26}" width="${boxW - 12}" height="${boxH - 32}" viewBox="${foldedViewBox}" preserveAspectRatio="xMidYMid meet">`;
+      svg += `<g transform="scale(1, -1)">`;
+      svg += foldedGridHtml;
+      svg += folded.paperHtml;
+      // 第一步出發方向指示線
+      svg += `<line x1="0" y1="0" x2="${folded.firstDirX * 0.45}" y2="${folded.firstDirY * 0.45}" stroke="#198754" stroke-width="0.1" stroke-linecap="round"/>`;
+      svg += foldedFeatsHtml;
+      svg += `</g>`;
+      svg += `</svg>`;
+
+      // 頁首與紙帶區的分隔線
+      svg += `<line x1="${marginX}" y1="${dividerY}" x2="${svgWidth - marginX}" y2="${dividerY}" stroke="#ccc" stroke-width="1.2" stroke-dasharray="6,4"/>`;
+
+      // --- 下方紙帶區：每行 15 格 ---
       let currentGlobalIdx = 0;
       for (let r = 0; r < rowsCount; r++) {
           const y = marginY + r * (cellSize + rowGap);
           let currentX = marginX;
           let rowCellsCount = Math.min(maxCols, totalSquares - currentGlobalIdx);
+
+          // 每段左上角標註段號與格數範圍，避免多張混淆
+          svg += `<text x="${marginX}" y="${y - 7}" font-family="sans-serif" font-size="11.5" font-weight="bold" fill="#444">第 ${r + 1} 段（第 ${currentGlobalIdx + 1} ～ ${currentGlobalIdx + rowCellsCount} 格）</text>`;
 
           for (let c = 0; c < rowCellsCount; c++) {
               const logicalIdx = currentGlobalIdx + c;
@@ -741,7 +886,7 @@
       return svg;
   }
 
-  window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml, pathTurns) {
+  window.openModal = function(svgPathD, title, infoHtml, viewBox, gridHtml, featsHtml, startDir, pathTurns, targets, obstacles) {
       document.getElementById('modal-title').innerText = title;
       document.querySelector('.modal-svg').setAttribute('viewBox', viewBox);
       const combinedSvg = `
@@ -756,7 +901,7 @@
       
       const btnPrint = document.getElementById('btn-print-blueprint');
       btnPrint.onclick = function() {
-          const printSvgString = generatePrintStripSvg(pathTurns, title);
+          const printSvgString = generatePrintStripSvg(startDir, pathTurns, targets, obstacles, title);
           document.getElementById('print-area').innerHTML = printSvgString;
           window.print();
       };
@@ -856,7 +1001,7 @@
           const chosenPaths = validPaths.slice(0, limit);
           const mainSvg = generateSvgPath(chosenPaths[0][0], chosenPaths[0][1]);
 
-          statusText.innerText = `展示 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
+          statusText.innerText = `✅ 極速出圖！為您展示 ${chosenPaths.length} 組路線 (${result.elapsed_ms.toFixed(1)}ms)`;
           statusText.style.color = "#28a745";
           document.getElementById('svg-path').setAttribute('d', mainSvg);
 
@@ -868,9 +1013,10 @@
           const oStr = obstacles.length > 0 ? obstacles.map(o => `<span class="coord-tag">(${o[0]}, ${o[1]})</span>`).join('') : "無";
 
           chosenPaths.forEach((pathObj, idx) => {
+              const startDir = pathObj[0];
               const pathTurns = pathObj[1];
-              const svg_d = generateSvgPath(pathObj[0], pathTurns);
-              const bounds = getBounds(pathObj[0], pathTurns, targets, obstacles);
+              const svg_d = generateSvgPath(startDir, pathTurns);
+              const bounds = getBounds(startDir, pathTurns, targets, obstacles);
               const P = 1.0;
               const vX = bounds.minX - P, vY = bounds.minY - P;
               const vW = bounds.maxX - bounds.minX + 2 * P, vH = bounds.maxY - bounds.minY + 2 * P;
@@ -884,7 +1030,7 @@
 
               const card = document.createElement('div'); card.className = 'thumb-card';
               card.onclick = function() {
-                  openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml, pathTurns);
+                  openModal(svg_d, `Result ${idx + 1}`, infoHtml, viewBox, gridHtml, featsHtml, startDir, pathTurns, targets, obstacles);
               };
               card.innerHTML = `
                   <svg class="thumb-svg" viewBox="${viewBox}">
@@ -959,4 +1105,3 @@
 </script>
 </body>
 </html>
-
